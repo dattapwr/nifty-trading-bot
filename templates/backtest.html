@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <title>Backtest Report</title>
+    <style>
+        body { background-color: #0d1117; color: white; font-family: sans-serif; text-align: center; }
+        table { width: 80%; margin: 20px auto; border-collapse: collapse; }
+        th, td { border: 1px solid #30363d; padding: 12px; }
+        th { background-color: #161b22; color: #58a6ff; }
+        .back-link { color: #58a6ff; text-decoration: none; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>📊 मागील ५ दिवसांचा बॅकटिस्ट रिपोर्ट</h1>
+    <table>
+        <tr>
+            <th>स्टॉक</th>
+            <th>तारीख आणि वेळ</th>
+            <th>किंमत (₹)</th>
+        </tr>
+        {% for row in results %}
+        <tr>
+            <td>{{ row.ticker }}</td>
+            <td>{{ row.date }}</td>
+            <td>{{ row.price }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <br>
+    <a href="/" class="back-link">← मुख्य पेजवर परत जा</a>
+</body>
+</html>
