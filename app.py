@@ -5,8 +5,8 @@ import json
 import os
 from flask import Flask, render_template
 
-# येथे नीट लक्ष द्या: _name_ मध्ये दोन्ही बाजूला दोन अंडरस्कोर्स आहेत.
-app = Flask(_name_)
+# येथे नीट लक्ष द्या: __name__ मध्ये दोन्ही बाजूला दोन अंडरस्कोर्स आहेत.
+app = Flask(__name__)
 
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
