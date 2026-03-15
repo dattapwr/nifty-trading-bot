@@ -56,5 +56,5 @@ def home():
     found = run_scanner()
     return f"स्कॅनर सुरू झाला आहे. {len(found)} स्टॉक सापडले. टेलिग्राम तपासा!"
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=10000)
