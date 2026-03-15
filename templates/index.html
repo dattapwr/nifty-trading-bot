@@ -1,50 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="mr">
 <head>
-    <title>दत्ता - ट्रेडिंग स्कॅनर</title>
+    <meta charset="UTF-8">
+    <title>दत्ता ट्रेडिंग स्कॅनर</title>
     <style>
-        body { background-color: #121212; color: white; font-family: sans-serif; text-align: center; }
-        .stock-card { border: 1px solid #4CAF50; padding: 15px; margin: 10px; border-radius: 10px; display: inline-block; cursor: pointer; }
-        #chart-container { margin-top: 20px; width: 90%; height: 500px; margin-left: auto; margin-right: auto; }
+        body { background-color: #0d1117; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; }
+        .container { display: flex; flex-wrap: wrap; justify-content: center; padding: 20px; }
+        .card { background: #161b22; border: 2px solid #30363d; margin: 10px; padding: 20px; border-radius: 12px; cursor: pointer; transition: 0.3s; width: 150px; }
+        .card:hover { border-color: #58a6ff; }
+        #chart-box { width: 90%; height: 500px; margin: 20px auto; border: 2px solid #30363d; border-radius: 15px; overflow: hidden; }
     </style>
 </head>
 <body>
-    <h2>🚀 लाईव्ह स्टॉक स्कॅनर रिझल्ट्स</h2>
-    
-    {% for stock in stocks %}
-    <div class="stock-card" onclick="loadChart('{{ stock.symbol }}')">
-        <h3>{{ stock.symbol }}</h3>
-        <p>किंमत: ₹{{ stock.price }}</p>
-        <small>(चार्ट पाहण्यासाठी क्लिक करा)</small>
+    <h1>📈 आजचे सापडलेले स्टॉक्स</h1>
+    <div class="container">
+        {% for stock in stocks %}
+        <div class="card" onclick="showChart('{{ stock.symbol }}')">
+            <h3>{{ stock.symbol }}</h3>
+            <p>₹{{ stock.price }}</p>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 
-    <div id="chart-container">
+    <div id="chart-box">
         <div id="tradingview_widget"></div>
     </div>
 
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <script type="text/javascript">
-      function loadChart(symbol) {
-        // NSE स्टॉक्ससाठी 'NSE:' प्रिफिक्स आवश्यक असतो
-        var cleanSymbol = symbol.replace('.NS', '');
-        new TradingView.widget({
-          "width": "100%",
-          "height": 500,
-          "symbol": "NSE:" + cleanSymbol,
-          "interval": "5",
-          "timezone": "Asia/Kolkata",
-          "theme": "dark",
-          "style": "1",
-          "locale": "in",
-          "toolbar_bg": "#f1f3f6",
-          "enable_publishing": false,
-          "allow_symbol_change": true,
-          "container_id": "tradingview_widget"
-        });
-      }
-      // बाय डिफॉल्ट निफ्टीचा चार्ट लोड करा
-      loadChart('NIFTY');
+    <script>
+        function showChart(symbol) {
+            let cleanSym = symbol.replace('.NS', '');
+            new TradingView.widget({
+                "width": "100%", "height": "100%", "symbol": "NSE:" + cleanSym,
+                "interval": "5", "timezone": "Asia/Kolkata", "theme": "dark", "style": "1",
+                "container_id": "tradingview_widget"
+            });
+        }
+        showChart('NIFTY'); // सुरुवातीला निफ्टी दिसेल
     </script>
 </body>
 </html>
+ 
