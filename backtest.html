@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>बॅकटिस्ट रिपोर्ट - दत्ता</title>
+    <style>
+        body { background-color: #0d1117; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
+        table { width: 90%; margin: 20px auto; border-collapse: collapse; background: #161b22; border-radius: 10px; overflow: hidden; }
+        th, td { border: 1px solid #30363d; padding: 15px; text-align: center; }
+        th { background-color: #21262d; color: #58a6ff; }
+        tr:hover { background-color: #1c2128; }
+        .btn { background-color: #238636; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>📊 मागील ५ दिवसांचा बॅकटिस्ट रिपोर्ट</h1>
+    <p>तुमच्या स्ट्रॅटेजीनुसार मागील दिवसांत सापडलेले स्टॉक्स:</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>स्टॉक नाव</th>
+                <th>तारीख आणि वेळ</th>
+                <th>सापडलेली किंमत (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if results %}
+                {% for row in results %}
+                <tr>
+                    <td><strong>{{ row.ticker }}</strong></td>
+                    <td>{{ row.date }}</td>
+                    <td>₹{{ row.price }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="3">सध्या कोणताही बॅकटिस्ट डेटा उपलब्ध नाही.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <br>
+    <a href="/" class="btn">← मुख्य स्कॅनरवर परत जा</a>
+</body>
+</html>
