@@ -6,90 +6,84 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
-# --- कॉन्फिगरेशन ---
+# --- तुमचे क्रेडेंशियल्स ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 
-# NSE सेक्टर इंडेक्सची यादी
-SECTOR_INDEXES = [
-    '^CNXAUTO', '^CNXBANK', '^CNXIT', '^CNXPHARMA', 
-    '^CNXMETAL', '^CNXFMCG', '^CNXINFRA', '^CNXENERGY'
-]
+# सेक्टर मॅपिंग (फक्त प्रमुख ८ सेक्टर)
+SECTOR_MAP = {
+    '^CNXAUTO': 'Automobile', '^CNXBANK': 'Banking', '^CNXIT': 'IT',
+    '^CNXPHARMA': 'Pharma', '^CNXMETAL': 'Metals', '^CNXFMCG': 'FMCG',
+    '^CNXINFRA': 'Infra', '^CNXENERGY': 'Energy'
+}
 
-def send_telegram_msg(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={message}"
+# प्रत्येक सेक्टरमधील फक्त टॉप १० लिक्विड स्टॉक्स
+SECTOR_STOCKS = {
+    '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'ASHOKLEY.NS', 'BAJAJ-AUTO.NS', 'HEROMOTOCO.NS', 'EICHERMOT.NS', 'TVSMOTOR.NS', 'BALKRISIND.NS', 'BHARATFORG.NS'],
+    '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 'BANKBARODA.NS', 'PNB.NS', 'INDUSINDBK.NS', 'IDFCFIRSTB.NS', 'AUBANK.NS'],
+    '^CNXIT': ['TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS', 'COFORGE.NS', 'MPHASIS.NS', 'PERSISTENT.NS', 'LTTS.NS'],
+    '^CNXPHARMA': ['SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'LUPIN.NS', 'ALKEM.NS', 'TORNTPHARM.NS', 'AUROPHARMA.NS', 'GLENMARK.NS'],
+    '^CNXMETAL': ['TATASTEEL.NS', 'JINDALSTEL.NS', 'HINDALCO.NS', 'JSWSTEEL.NS', 'VEDL.NS', 'SAIL.NS', 'NATIONALUM.NS', 'NMDC.NS', 'HINDCOPPER.NS', 'APOLLOTYRE.NS'],
+    '^CNXFMCG': ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS', 'DABUR.NS', 'TATACONSUM.NS', 'COLPAL.NS', 'MARICO.NS', 'GODREJCP.NS', 'UBL.NS'],
+    '^CNXINFRA': ['LT.NS', 'RELIANCE.NS', 'ADANIPORTS.NS', 'GRASIM.NS', 'CONCOR.NS', 'BHEL.NS', 'SIEMENS.NS', 'ULTRACEMCO.NS', 'DLF.NS', 'AMBUJACEM.NS'],
+    '^CNXENERGY': ['ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'BPCL.NS', 'IOC.NS', 'GAIL.NS', 'RELIANCE.NS', 'HINDPETRO.NS', 'TATAPOWER.NS', 'ADANIGREEN.NS']
+}
+
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}"
     try: requests.get(url, timeout=5)
     except: pass
 
-def get_live_sector_data():
-    """सर्वात जास्त पडलेले ३ सेक्टर शोधणे"""
-    sector_results = []
-    for sector in SECTOR_INDEXES:
+def get_worst_sector():
+    """आजचा सर्वात जास्त पडलेला १ सेक्टर शोधणे"""
+    performance = []
+    for sym in SECTOR_MAP.keys():
         try:
-            data = yf.download(sector, period='1d', interval='5m', progress=False)
-            if not data.empty:
-                # आजची टक्केवारी काढणे
-                change = ((data['Close'].iloc[-1] - data['Open'].iloc[0]) / data['Open'].iloc[0]) * 100
-                sector_results.append({'symbol': sector, 'change': change})
+            # ५०२ एरर टाळण्यासाठी फक्त १ दिवसाचा डेटा
+            d = yf.download(sym, period='1d', interval='15m', progress=False)
+            if not d.empty:
+                chg = ((d['Close'].iloc[-1] - d['Open'].iloc[0]) / d['Open'].iloc[0]) * 100
+                performance.append({'sym': sym, 'chg': chg, 'name': SECTOR_MAP[sym]})
         except: continue
-    
-    # सर्वात जास्त Negative Change असलेले ३ सेक्टर
-    return sorted(sector_results, key=lambda x: x['change'])[:3]
+    return sorted(performance, key=lambda x: x['chg'])[0] if performance else None
 
-def get_stocks_from_sector(sector_code):
-    """सेक्टरनुसार NSE मधील प्रमुख स्टॉक यादी (Auto-Mapping)"""
-    mapping = {
-        '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'ASHOKLEY.NS'],
-        '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS'],
-        '^CNXIT': ['TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS'],
-        '^CNXPHARMA': ['SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 'LUPIN.NS'],
-        '^CNXMETAL': ['TATASTEEL.NS', 'HINDALCO.NS', 'JINDALSTEL.NS', 'JSWSTEEL.NS'],
-        '^CNXFMCG': ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS'],
-        '^CNXINFRA': ['LT.NS', 'RELIANCE.NS', 'ADANIPORTS.NS', 'BHEL.NS'],
-        '^CNXENERGY': ['ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'BPCL.NS']
-    }
-    return mapping.get(sector_code, [])
-
-def scan_logic():
-    found_stocks = []
-    top_down_sectors = get_live_sector_data()
+def scan_stocks():
+    found = []
+    top_down_sec = get_worst_sector()
     
-    for sector in top_down_sectors:
-        tickers = get_stocks_from_sector(sector['symbol'])
-        for ticker in tickers:
+    if top_down_sec:
+        tickers = SECTOR_STOCKS.get(top_down_sec['sym'], [])
+        for t in tickers:
             try:
-                # ५ मिनिटांचा आणि डेली डेटा मागवणे
-                df = yf.download(ticker, period='2d', interval='5m', progress=False)
-                d_df = yf.download(ticker, period='5d', interval='1d', progress=False)
+                # वेगवान स्कॅनिंगसाठी कमी डेटा पॉईंट्स
+                df = yf.download(t, period='2d', interval='5m', progress=False)
+                d_df = yf.download(t, period='5d', interval='1d', progress=False)
                 
                 if df.empty or d_df.empty: continue
                 
-                price = float(df['Close'].iloc[-1])
-                o_price = float(df['Open'].iloc[0])
-                p_low = float(d_df['Low'].iloc[-2])
+                cp = float(df['Close'].iloc[-1])
+                op = float(df['Open'].iloc[0])
+                pl = float(d_df['Low'].iloc[-2])
 
-                # स्ट्रॅटेजी: Open <= Prev Low आणि मागील ३ लाल कॅन्डल
-                if o_price <= p_low and price >= 400:
+                # कंडिशन: Open <= Prev Low आणि ३ लाल कॅन्डल
+                if op <= pl and cp >= 300:
                     if (df['Close'].iloc[-2] < df['Open'].iloc[-2]) and \
                        (df['Close'].iloc[-3] < df['Open'].iloc[-3]) and \
                        (df['Close'].iloc[-4] < df['Open'].iloc[-4]):
                         
-                        time_now = datetime.now().strftime('%H:%M')
-                        found_stocks.append({
-                            'symbol': ticker, 
-                            'price': round(price, 2), 
-                            'time': time_now,
-                            'sector': sector['symbol'].replace('^', '')
-                        })
-                        send_telegram_msg(f"🚩 Alert: {ticker} ({sector['symbol']})\nPrice: ₹{round(price,2)}\nTime: {time_now}")
+                        tm = datetime.now().strftime('%H:%M')
+                        found.append({'s': t, 'p': round(cp,2), 't': tm, 'sec': top_down_sec['name']})
+                        send_telegram(f"🚩 Top Down Sector ({top_down_sec['name']}): {t} @ ₹{round(cp,2)} ({tm})")
             except: continue
-    return found_stocks
+    return found
 
 @app.route('/')
 def home():
-    # NSE मधून सेक्टर स्कॅन करून रिझल्ट दाखवणे
-    stocks = scan_logic()
-    return render_template('index.html', stocks=stocks)
+    try:
+        stocks = scan_stocks()
+        return render_template('index.html', stocks=stocks)
+    except Exception as e:
+        return f"सर्व्हर लोड होत आहे, कृपया रिफ्रेश करा. (Error: {str(e)})"
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
