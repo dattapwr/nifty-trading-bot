@@ -1,23 +1,17 @@
 import yfinance as yf
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, time
 from flask import Flask, render_template
 
 app = Flask(__name__)
 
-# --- कॉन्फिगरेशन ---
+# --- तुमचे अपडेट केलेले क्रेडेंशियल्स ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 
-# एकदा मेसेज पाठवलेल्या स्टॉक्सची यादी (पुन्हा पुन्हा मेसेज टाळण्यासाठी)
-SENT_MESSAGES = set()
-
-SECTOR_MAP = {
-    '^CNXAUTO': 'Automobile', '^CNXBANK': 'Banking', '^CNXIT': 'IT',
-    '^CNXPHARMA': 'Pharma', '^CNXMETAL': 'Metals', '^CNXFMCG': 'FMCG',
-    '^CNXINFRA': 'Infra', '^CNXENERGY': 'Energy'
-}
+# आधी पाठवलेल्या अलर्ट्सची नोंद (Repeat टाळण्यासाठी फक्त एकाच कॅन्डलवर)
+LAST_ALERTS = {}
 
 SECTOR_STOCKS = {
     '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'ASHOKLEY.NS', 'BAJAJ-AUTO.NS', 'TVSMOTOR.NS'],
@@ -35,73 +29,78 @@ def send_telegram(msg):
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try:
         requests.get(url, params=params, timeout=10)
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+    except:
+        print("Telegram Error")
 
 def scan_stocks():
     found = []
+    now_time = datetime.now().time()
+    
+    # अट ६: ९:३० AM ते २:०० PM दरम्यानच स्कॅनिंग
+    if not (time(9, 30) <= now_time <= time(14, 0)):
+        return []
+
     all_tickers = []
     for t_list in SECTOR_STOCKS.values():
         all_tickers.extend(t_list)
-    
     all_tickers = list(set(all_tickers))
 
-    try:
-        data = yf.download(all_tickers, period='5d', interval='1d', progress=False)
-        
-        for t in all_tickers:
-            try:
-                cp = data['Close'][t].iloc[-1]
-                pl = data['Low'][t].iloc[-2]
-                op = data['Open'][t].iloc[-1]
+    for t in all_tickers:
+        try:
+            # ५ मिनिटांच्या कॅन्डल आणि डेली डेटा मिळवणे
+            df = yf.download(t, period='2d', interval='5m', progress=False)
+            daily = yf.download(t, period='2d', interval='1d', progress=False)
+            
+            if df.empty or len(df) < 5: continue
+            
+            prev_low = daily['Low'].iloc[0] # कालचा लो
+            today_open = df['Open'].iloc[0] # आजचा ओपन
 
-                # क्रायटेरिया: Open <= Prev Low
-                if op <= pl and cp >= 100:
+            # अट १: आजचा ओपन कालच्या लो च्या खाली
+            if today_open < prev_low:
+                
+                c0 = df.iloc[-1] # सध्याची कॅन्डल
+                c1 = df.iloc[-2] # मागील कॅन्डल (ग्रीन असावी)
+                c2 = df.iloc[-3] # त्याच्या आधीची (हाय-लो चेकसाठी)
+
+                # अट २: मागील कॅन्डल ग्रीन पाहिजे
+                is_green = c1['Close'] > c1['Open']
+                
+                # अट ३: Inside Candle (आधीच्या कॅन्डलच्या हाय-लो च्या आत) आणि कमी व्हॉल्यूम
+                is_inside = (c1['High'] < c2['High']) and (c1['Low'] > c2['Low'])
+                low_volume = c1['Volume'] < c2['Volume']
+                
+                # अट ४: सध्याच्या कॅन्डलने त्या ग्रीन कॅन्डलचा लो तोडला
+                breakdown = c0['Close'] < c1['Low']
+
+                if is_green and is_inside and low_volume and breakdown:
+                    # अट ५: जितक्या वेळा घडेल तितक्या वेळा (वेळेनुसार युनिक की)
                     tm = datetime.now().strftime('%H:%M')
-                    
-                    stock_sec = "Nifty"
-                    for s_sym, t_list in SECTOR_STOCKS.items():
-                        if t in t_list:
-                            stock_sec = SECTOR_MAP[s_sym]
-                            break
-                    
-                    stock_info = {
-                        's': t, 
-                        'p': round(cp, 2), 
-                        't': tm, 
-                        'sec': stock_sec,
-                        'tv_url': f"https://in.tradingview.com/chart/?symbol=NSE:{t.replace('.NS','')}"
-                    }
-                    found.append(stock_info)
+                    alert_id = f"{t}_{tm}" 
 
-                    # टेलिग्राम मेसेज पाठवणे (दिवसातून एकदाच एका स्टॉकसाठी)
-                    msg_id = f"{t}_{datetime.now().strftime('%Y%m%d')}"
-                    if msg_id not in SENT_MESSAGES:
+                    if alert_id not in LAST_ALERTS:
                         alert_msg = (
-                            f"🚩 *Stock Alert!*\n\n"
-                            f"🏢 *Sector:* {stock_sec}\n"
-                            f"📈 *Stock:* {t}\n"
-                            f"💰 *Price:* ₹{round(cp, 2)}\n"
+                            f"🚩 *STRATEGY ALERT!* 🚩\n\n"
+                            f"🏢 *Stock:* `{t}`\n"
+                            f"💰 *Price:* ₹{round(c0['Close'], 2)}\n"
+                            f"✅ *Pattern:* Inside Green Candle Breakdown\n"
                             f"⏰ *Time:* {tm}\n\n"
-                            f"🔗 [View Chart]({stock_info['tv_url']})"
+                            f"🔗 [View Chart](https://in.tradingview.com/chart/?symbol=NSE:{t.replace('.NS','')})"
                         )
                         send_telegram(alert_msg)
-                        SENT_MESSAGES.add(msg_id)
-            except:
-                continue
-    except:
-        pass
-        
-    return sorted(found, key=lambda x: x['sec'])
+                        LAST_ALERTS[alert_id] = True
+                        found.append({'s': t, 'p': round(c0['Close'], 2), 't': tm})
+        except:
+            continue
+    return found
 
 @app.route('/')
 def home():
     try:
-        stocks_data = scan_stocks()
-        today = datetime.now().strftime('%d-%m-%Y')
-        return render_template('index.html', stocks=stocks_data, date=today)
+        stocks = scan_stocks()
+        return render_template('index.html', stocks=stocks, date=datetime.now().strftime('%d-%m-%Y'))
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"System Running... (Error: {str(e)})"
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
