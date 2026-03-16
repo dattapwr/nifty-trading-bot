@@ -3,35 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="60"> <title>Inside Candle Scanner</title>
+    <meta http-equiv="refresh" content="60"> <title>Nifty Master Scanner</title>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; padding: 10px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 20px; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; border-left: 6px solid #ef4444; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .symbol { font-size: 1.5em; color: #38bdf8; font-weight: bold; margin-bottom: 5px; }
-        .price { color: #4ade80; font-size: 1.3em; font-weight: bold; }
-        .status { color: #fbbf24; font-size: 0.9em; margin-top: 8px; font-weight: bold; }
-        h1 { color: #f1f5f9; font-size: 1.8em; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; padding: 10px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; padding: 20px; }
+        
+        /* कार्ड डिझाइन */
+        .card { background: #1e293b; padding: 20px; border-radius: 15px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); transition: transform 0.2s; position: relative; overflow: hidden; }
+        .card:hover { transform: translateY(-5px); }
+        
+        /* सिम्बॉल आणि प्राईस */
+        .symbol { font-size: 1.6em; color: #38bdf8; font-weight: bold; margin-bottom: 5px; }
+        .price { color: #f8fafc; font-size: 1.4em; font-weight: bold; }
+        
+        /* स्टेटस लेबल्स */
+        .status-buy { background: #064e3b; color: #4ade80; padding: 5px 12px; border-radius: 20px; font-size: 0.9em; font-weight: bold; display: inline-block; margin-top: 10px; }
+        .status-sell { background: #450a0a; color: #f87171; padding: 5px 12px; border-radius: 20px; font-size: 0.9em; font-weight: bold; display: inline-block; margin-top: 10px; }
+        
+        /* बॉर्डर कलर्स */
+        .border-buy { border-top: 5px solid #4ade80; }
+        .border-sell { border-top: 5px solid #ef4444; }
+        
+        .time { font-size: 0.8em; color: #94a3b8; margin-top: 15px; }
+        h1 { margin-top: 20px; color: #f1f5f9; font-size: 2em; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .no-data { padding: 80px; color: #64748b; font-size: 1.2em; }
     </style>
 </head>
 <body>
-    <h1>🚩 Inside Green Candle Breakdown</h1>
-    <p style="color: #94a3b8;">वेळ: ९:३० AM ते २:०० PM | तारीख: {{ date }}</p>
-    
+    <h1>🚀 Nifty Buy/Sell Scanner 📉</h1>
+    <p style="color: #94a3b8;">स्ट्रॅटेजी: Inside Candle Breakout | वेळ: ९:३० - २:००</p>
+    <p>तारीख: {{ date }}</p>
+
     <div class="grid">
         {% if stocks %}
             {% for s in stocks %}
-                <div class="card">
+                <div class="card {{ 'border-sell' if s.type == 'SELL' else 'border-buy' }}">
                     <div class="symbol">{{ s.s }}</div>
                     <div class="price">₹{{ s.p }}</div>
-                    <div class="status">📉 Breakdown Confirmed</div>
-                    <div style="font-size: 0.8em; color: #94a3b8; margin-top: 10px;">स्कॅन वेळ: {{ s.t }}</div>
+                    
+                    {% if s.type == 'SELL' %}
+                        <div class="status-sell">📉 SELL: Inside Green Broken</div>
+                    {% else %}
+                        <div class="status-buy">🚀 BUY: Inside Red Breakout</div>
+                    {% endif %}
+                    
+                    <div class="time">स्कॅन वेळ: {{ s.t }}</div>
+                    <a href="https://in.tradingview.com/chart/?symbol=NSE:{{ s.s|replace('.NS','') }}" target="_blank" style="text-decoration: none; color: #38bdf8; font-size: 0.8em; display: block; margin-top: 10px;">चार्ट पहा →</a>
                 </div>
             {% endfor %}
         {% else %}
-            <div style="padding: 50px; color: #64748b;">
+            <div class="no-data">
                 <p>सध्या कोणताही स्टॉक अटीमध्ये बसत नाही.</p>
-                <small>मार्केट सुरू झाल्यावर ९:३० नंतर तपासणी करा.</small>
+                <small>उद्या सकाळी ९:३० नंतर लाईव्ह मार्केटमध्ये पुन्हा तपासा.</small>
             </div>
         {% endif %}
     </div>
