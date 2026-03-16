@@ -3,15 +3,17 @@ import pandas as pd
 import requests
 import json
 import os
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
-# येथे नीट लक्ष द्या: __name__ मध्ये दोन्ही बाजूला दोन अंडरस्कोर्स आहेत.
+# Flask ॲप सेटअप
 app = Flask(__name__)
 
+# टेलिग्राम कॉन्फिगरेशन
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 DATA_FILE = "stocks_found.json"
 
+# स्टॉक लिस्ट
 STOCK_LIST = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'AXISBANK.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'KOTAKBANK.NS', 'LT.NS', 'BAJFINANCE.NS', 'MARUTI.NS', 'TITAN.NS', 'ASIANPAINT.NS', 'M&M.NS', 'SUNPHARMA.NS', 'TATAMOTORS.NS', 'JINDALSTEL.NS', 'HINDALCO.NS', 'HCLTECH.NS', 'WIPRO.NS', 'ADANIENT.NS', 'ADANIPORTS.NS', 'DLF.NS', 'TRENT.NS', 'HAL.NS', 'BEL.NS', 'COALINDIA.NS', 'NTPC.NS', 'ITC.NS']
 
 def load_history():
@@ -36,6 +38,7 @@ def run_scanner():
     found_now = []
     for ticker in STOCK_LIST:
         try:
+            # लाईव्ह डेटा फेच करणे
             df_5m = yf.download(ticker, period='2d', interval='5m', progress=False)
             df_daily = yf.download(ticker, period='2d', interval='1d', progress=False)
             
@@ -64,24 +67,6 @@ def run_scanner():
             continue
     return history
 
-def run_backtest():
-    bt_results = []
-    # वेळ वाचवण्यासाठी टॉप १० स्टॉक्सवर ५ दिवसांचा बॅकटिस्ट
-    for ticker in STOCK_LIST[:10]:
-        try:
-            df = yf.download(ticker, period='5d', interval='5m', progress=False)
-            for i in range(10, len(df)):
-                # साधी बॅकटिस्ट अट: २ सलग Red Candles
-                if (df['Close'].iloc[i-1] < df['Open'].iloc[i-1]) and \
-                   (df['Close'].iloc[i-2] < df['Open'].iloc[i-2]):
-                    bt_results.append({
-                        'ticker': ticker, 
-                        'date': df.index[i].strftime('%d-%m %H:%M'), 
-                        'price': round(float(df['Close'].iloc[i]), 2)
-                    })
-        except: continue
-    return bt_results
-
 @app.route('/')
 def home():
     stocks = run_scanner()
@@ -89,9 +74,60 @@ def home():
 
 @app.route('/backtest')
 def backtest_page():
-    results = run_backtest()
-    return render_template('backtest.html', results=results)
+    # युझरने निवडलेली तारीख घेतो (कॅलेंडरमधून)
+    selected_date = request.args.get('date')
+    bt_results = []
+    
+    if not selected_date:
+        # जर तारीख निवडली नसेल, तर रिकामे पेज दाखवा
+        return render_template('backtest.html', results=[])
+
+    # निवडलेल्या तारखेसाठी बॅकटिस्ट लॉजिक
+    for ticker in STOCK_LIST[:15]: # वेळ वाचवण्यासाठी टॉप १५ स्टॉक्स
+        try:
+            # तारीख फॉरमॅट सेट करणे
+            target = pd.to_datetime(selected_date)
+            start_dt = target - pd.Timedelta(days=5) # मागील लो मिळवण्यासाठी ५ दिवस मागे
+            end_dt = target + pd.Timedelta(days=1)
+            
+            df = yf.download(ticker, start=start_dt.strftime('%Y-%m-%d'), 
+                             end=end_dt.strftime('%Y-%m-%d'), interval='5m', progress=False)
+            
+            if df.empty: continue
+            
+            # फक्त निवडलेल्या दिवसाचा डेटा वेगळा करणे
+            day_data = df[df.index.date == target.date()]
+            
+            # मागील दिवसाचा Low काढणे
+            prev_days = df[df.index.date < target.date()]
+            if prev_days.empty: continue
+            prev_low = prev_days['Low'].min()
+
+            if not day_data.empty:
+                # ९:१५ ची ओपनिंग चेक करणे
+                open_val = day_data['Open'].iloc[0]
+                
+                if open_val <= prev_low:
+                    # ३ सलग लाल कॅन्डल शोधणे
+                    for i in range(3, len(day_data)):
+                        is_red = (day_data['Close'].iloc[i-1] < day_data['Open'].iloc[i-1]) and \
+                                 (day_data['Close'].iloc[i-2] < day_data['Open'].iloc[i-2]) and \
+                                 (day_data['Close'].iloc[i-3] < day_data['Open'].iloc[i-3])
+                        
+                        if is_red:
+                            bt_results.append({
+                                'ticker': ticker, 
+                                'date': day_data.index[i].strftime('%d-%b %H:%M'), 
+                                'price': round(float(day_data['Close'].iloc[i]), 2)
+                            })
+                            break # एका स्टॉकसाठी एका दिवसात एकच सिग्नल पकडणे
+        except Exception as e:
+            print(f"Error backtesting {ticker}: {e}")
+            continue
+            
+    return render_template('backtest.html', results=bt_results)
 
 if __name__ == "__main__":
-    # Render साठी पोर्ट १०००० सेट केला आहे
-    app.run(host='0.0.0.0', port=10000)
+    # Render किंवा लोकल सर्व्हरसाठी पोर्ट १००००
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
