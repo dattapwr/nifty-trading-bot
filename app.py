@@ -9,7 +9,7 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
-# --- कॉन्फिगरेशन (तुमचा डेटा बदला) ---
+# --- कॉन्फिगरेशन ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 DATA_FILE = "stocks_found.json"
@@ -47,7 +47,6 @@ def run_scanner():
         if index % 15 == 0: time.sleep(0.5) 
         
         try:
-            # फक्त आजचा डेटा स्कॅन करा
             df_5m = yf.download(ticker, period='1d', interval='5m', progress=False)
             df_daily = yf.download(ticker, period='5d', interval='1d', progress=False)
             
@@ -57,7 +56,6 @@ def run_scanner():
             p_low = float(df_daily['Low'].iloc[-2])
             o_price = float(df_5m['Open'].iloc[0])
 
-            # स्ट्रॅटेजी: Open <= Prev Low आणि मागील ३ लाल कॅन्डल
             cond_daily = o_price <= p_low
             cond_red = (df_5m['Close'].iloc[-2] < df_5m['Open'].iloc[-2]) and \
                        (df_5m['Close'].iloc[-3] < df_5m['Open'].iloc[-3]) and \
