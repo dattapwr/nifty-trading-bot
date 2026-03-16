@@ -9,7 +9,7 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
-# --- कॉन्फिगरेशन ---
+# --- कॉन्फिगरेशन (तुमचा डेटा बदला) ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 DATA_FILE = "stocks_found.json"
@@ -36,18 +36,18 @@ def send_telegram_msg(message):
 
 def run_scanner():
     history = load_history()
-    # आजची तारीख मिळवा
     today_str = datetime.now().strftime('%Y-%m-%d')
     
-    # जर फाईल जुन्या तारखेची असेल तर रिकामी करा (फक्त आजचे स्टॉक दिसण्यासाठी)
+    # दुसऱ्या दिवशी जुना डेटा साफ करणे
     if history and history[0].get('date') != today_str:
         history = []
         save_history([])
 
     for index, ticker in enumerate(FNO_LIST):
-        if index % 15 == 0: time.sleep(0.5) # लोड कमी करण्यासाठी थोडी विश्रांती
+        if index % 15 == 0: time.sleep(0.5) 
         
         try:
+            # फक्त आजचा डेटा स्कॅन करा
             df_5m = yf.download(ticker, period='1d', interval='5m', progress=False)
             df_daily = yf.download(ticker, period='5d', interval='1d', progress=False)
             
@@ -57,14 +57,13 @@ def run_scanner():
             p_low = float(df_daily['Low'].iloc[-2])
             o_price = float(df_5m['Open'].iloc[0])
 
-            # स्ट्रॅटेजी कंडिशन
+            # स्ट्रॅटेजी: Open <= Prev Low आणि मागील ३ लाल कॅन्डल
             cond_daily = o_price <= p_low
             cond_red = (df_5m['Close'].iloc[-2] < df_5m['Open'].iloc[-2]) and \
                        (df_5m['Close'].iloc[-3] < df_5m['Open'].iloc[-3]) and \
                        (df_5m['Close'].iloc[-4] < df_5m['Open'].iloc[-4])
             
             if cond_daily and cond_red and price >= 400:
-                # जर स्टॉक आधीच लिस्टमध्ये नसेल तरच जोडा
                 if not any(s['symbol'] == ticker for s in history):
                     now_time = datetime.now().strftime('%H:%M')
                     stock_data = {
@@ -78,7 +77,6 @@ def run_scanner():
                     send_telegram_msg(f"🚩 Alert: {ticker}\nPrice: ₹{round(price, 2)}\nTime: {now_time}")
         except: continue
     
-    # वेळेनुसार सॉर्ट करा (नवीन स्टॉक वर दिसतील)
     return sorted(history, key=lambda x: x['time'], reverse=True)
 
 @app.route('/')
