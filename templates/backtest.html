@@ -2,53 +2,86 @@
 <html lang="mr">
 <head>
     <meta charset="UTF-8">
-    <title>बॅकटिस्ट रिपोर्ट - विशिष्ट तारीख</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>दत्ता ट्रेडिंग - बॅकटिस्ट रिपोर्ट</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Poppins', sans-serif; background-color: #0f172a; color: white; text-align: center; padding: 20px; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; max-width: 600px; margin: auto; border: 1px solid #334155; }
-        input[type="date"] { padding: 10px; border-radius: 5px; border: none; margin: 10px; }
-        button { background: #38bdf8; color: #0f172a; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-        th, td { border-bottom: 1px solid #334155; padding: 12px; }
-        th { color: #38bdf8; }
-        .btn-home { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; }
+        body { font-family: 'Poppins', sans-serif; background-color: #0f172a; color: white; padding: 20px; text-align: center; }
+        .card { background: #1e293b; padding: 25px; border-radius: 15px; max-width: 800px; margin: auto; border: 1px solid #334155; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        input[type="date"] { padding: 10px; border-radius: 8px; border: 1px solid #38bdf8; background: #0f172a; color: white; margin: 10px; }
+        button { background: #38bdf8; color: #0f172a; padding: 12px 25px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #7dd3fc; transform: translateY(-2px); }
+        
+        .summary { display: flex; justify-content: space-around; margin: 25px 0; font-size: 1.2rem; }
+        .pnl-plus { color: #4ade80; font-weight: 600; }
+        .pnl-minus { color: #f87171; font-weight: 600; }
+
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
+        th, td { padding: 15px; border-bottom: 1px solid #334155; text-align: center; }
+        th { background: #334155; color: #38bdf8; }
+        tr:hover { background: #2d3748; }
+
+        .btn-home { display: inline-block; margin-top: 30px; color: #94a3b8; text-decoration: none; border-bottom: 1px solid #94a3b8; }
     </style>
 </head>
 <body>
-    <h1>📊 विशिष्ट दिवसाची बॅकटेस्ट</h1>
-    
+
     <div class="card">
+        <h1>📊 बॅकटिस्ट रिपोर्ट जनरेटर</h1>
+        <p>विशिष्ट कालावधी निवडून तुमची स्ट्रॅटेजी तपासा</p>
+        
         <form action="/backtest" method="GET">
-            <label>तारीख निवडा:</label><br>
-            <input type="date" name="date" required>
-            <button type="submit">रिपोर्ट पहा</button>
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                <div>
+                    <label>पासून (From):</label><br>
+                    <input type="date" name="from_date" required>
+                </div>
+                <div>
+                    <label>पर्यंत (To):</label><br>
+                    <input type="date" name="to_date" required>
+                </div>
+            </div>
+            <button type="submit">रिपोर्ट जनरेट करा</button>
         </form>
     </div>
 
     {% if results %}
+        <div class="summary">
+            <div>एकूण ट्रेड्स: <strong>{{ results|length }}</strong></div>
+            <div>एकूण नफा/तोटा: <span class="{{ 'pnl-plus' if total_pnl > 0 else 'pnl-minus' }}">₹{{ total_pnl }}</span></div>
+        </div>
+
         <table>
             <thead>
                 <tr>
+                    <th>तारीख</th>
                     <th>स्टॉक</th>
                     <th>वेळ</th>
-                    <th>किंमत (₹)</th>
+                    <th>एन्ट्री (₹)</th>
+                    <th>एक्झिट (₹)</th>
+                    <th>नफा/तोटा</th>
                 </tr>
             </thead>
             <tbody>
                 {% for res in results %}
                 <tr>
-                    <td>{{ res.ticker }}</td>
                     <td>{{ res.date }}</td>
-                    <td>{{ res.price }}</td>
+                    <td><strong>{{ res.ticker }}</strong></td>
+                    <td>{{ res.time }}</td>
+                    <td>{{ res.entry }}</td>
+                    <td>{{ res.exit }}</td>
+                    <td class="{{ 'pnl-plus' if res.pnl > 0 else 'pnl-minus' }}">
+                        {{ '+' if res.pnl > 0 }}{{ res.pnl }}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    {% elif request.args.get('date') %}
-        <p style="margin-top: 20px;">दिलेल्या तारखेसाठी कोणतेही सिग्नल सापडले नाहीत.</p>
+    {% elif request.args.get('from_date') %}
+        <p style="margin-top: 30px; color: #94a3b8;">या कालावधीत कोणतेही सिग्नल सापडले नाहीत.</p>
     {% endif %}
 
-    <a href="/" class="btn-home">← मुख्य स्क्रीनवर जा</a>
+    <a href="/" class="btn-home">← लाईव्ह स्कॅनरवर जा</a>
+
 </body>
 </html>
