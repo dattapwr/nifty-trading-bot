@@ -3,129 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>दत्ता ट्रेडिंग बॉट - लाईव्ह स्कॅनर</title>
-    <meta http-equiv="refresh" content="60">
-    
+    <title>दत्ता ट्रेडिंग - लाईव्ह अलर्ट्स</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
-    
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-            margin: 0;
-            padding: 20px;
-            text-align: center;
-        }
-        .container {
-            max-width: 900px;
-            margin: auto;
-        }
-        h1 {
-            color: #38bdf8;
-            margin-bottom: 10px;
-        }
-        .btn-backtest {
-            display: inline-block;
-            background: #10b981;
-            color: white;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: bold;
-            margin-bottom: 30px;
-            transition: 0.3s;
-        }
-        .btn-backtest:hover { background: #059669; }
-
-        .no-stocks {
-            padding: 50px;
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px dashed #475569;
-        }
-
-        .stock-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-        }
-
-        .stock-card {
-            background: #1e293b;
-            border-radius: 15px;
-            padding: 15px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border: 1px solid #334155;
-        }
-
-        .stock-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #334155;
-            padding-bottom: 10px;
-        }
-
-        .symbol { font-size: 1.2rem; font-weight: 600; color: #fbbf24; }
-        .price { font-size: 1.1rem; color: #4ade80; }
-
-        .chart-container {
-            width: 100%;
-            height: 350px;
-            border-radius: 8px;
-            overflow: hidden;
-        }
+        body { font-family: 'Poppins', sans-serif; background-color: #0f172a; color: white; padding: 20px; text-align: center; }
+        .header { margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px; }
+        .header h1 { color: #38bdf8; margin: 0; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 1200px; margin: auto; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; transition: 0.3s; position: relative; overflow: hidden; }
+        .card:hover { transform: translateY(-5px); border-color: #38bdf8; }
+        .symbol { font-size: 1.4rem; font-weight: 600; color: #f8fafc; display: block; }
+        .price { font-size: 1.2rem; color: #4ade80; margin: 10px 0; }
+        .time { font-size: 0.9rem; color: #94a3b8; background: #0f172a; padding: 5px 10px; border-radius: 5px; display: inline-block; }
+        .no-data { background: #1e293b; padding: 50px; border-radius: 15px; grid-column: 1 / -1; color: #94a3b8; }
+        .refresh-text { font-size: 0.8rem; color: #64748b; margin-top: 20px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>📈 दत्ता ट्रेडिंग बॉट</h1>
-    <p>लाईव्ह स्कॅनर: सकाळी ९:३० नंतर आपोआप स्टॉक्स दिसतील.</p>
-    
-    <a href="/backtest" class="btn-backtest">📊 बॅकटिस्ट रिपोर्ट पहा</a>
+    <div class="header">
+        <h1>📊 दत्ता ट्रेडिंग लाईव्ह अलर्ट्स</h1>
+        <p>१८०+ FnO स्टॉक्सचे दिवसभराचे सर्व सिग्नल्स वेळेसह खाली दिसतील</p>
+    </div>
 
-    <div class="stock-grid">
+    <div class="grid">
         {% if stocks %}
             {% for stock in stocks %}
-            <div class="stock-card">
-                <div class="stock-info">
+                <div class="card">
                     <span class="symbol">{{ stock.symbol }}</span>
-                    <span class="price">₹{{ stock.price }}</span>
+                    <div class="price">₹{{ stock.price }}</div>
+                    <div class="time">सापडण्याची वेळ: {{ stock.time }}</div>
                 </div>
-                
-                <div class="chart-container" id="tv-chart-{{ loop.index }}"></div>
-                
-                <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-                <script type="text/javascript">
-                    new TradingView.widget({
-                        "width": "100%",
-                        "height": 350,
-                        "symbol": "NSE:{{ stock.symbol.replace('.NS', '') }}",
-                        "interval": "5",
-                        "timezone": "Asia/Kolkata",
-                        "theme": "dark",
-                        "style": "1",
-                        "locale": "in",
-                        "toolbar_bg": "#f1f3f6",
-                        "enable_publishing": false,
-                        "hide_side_toolbar": true,
-                        "allow_symbol_change": true,
-                        "container_id": "tv-chart-{{ loop.index }}"
-                    });
-                </script>
-            </div>
             {% endfor %}
         {% else %}
-            <div class="no-stocks">
-                <h3>सध्या कोणताही स्टॉक सापडला नाही.</h3>
-                <p>(तुमची स्ट्रॅटेजी: Daily Open <= Prev Low + 3 Red Candles जुळली की इथे स्टॉक दिसेल)</p>
+            <div class="no-data">
+                <h3>सध्या कोणताही सिग्नल नाही</h3>
+                <p>तुमची स्ट्रॅटेजी: Open <= Prev Low + 3 Red Candles जुळली की इथे स्टॉक दिसेल.</p>
             </div>
         {% endif %}
     </div>
-</div>
+
+    <p class="refresh-text">पेज ऑटोमॅटिक स्कॅन करत राहील. टेलिग्रामवर मेसेज येताच पेज रिफ्रेश करा.</p>
 
 </body>
 </html>
