@@ -2,32 +2,53 @@
 <html lang="mr">
 <head>
     <meta charset="UTF-8">
-    <title>Backtest Report</title>
+    <title>बॅकटिस्ट रिपोर्ट - विशिष्ट तारीख</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0d1117; color: white; font-family: sans-serif; text-align: center; }
-        table { width: 80%; margin: 20px auto; border-collapse: collapse; }
-        th, td { border: 1px solid #30363d; padding: 12px; }
-        th { background-color: #161b22; color: #58a6ff; }
-        .back-link { color: #58a6ff; text-decoration: none; font-size: 18px; }
+        body { font-family: 'Poppins', sans-serif; background-color: #0f172a; color: white; text-align: center; padding: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; max-width: 600px; margin: auto; border: 1px solid #334155; }
+        input[type="date"] { padding: 10px; border-radius: 5px; border: none; margin: 10px; }
+        button { background: #38bdf8; color: #0f172a; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #334155; padding: 12px; }
+        th { color: #38bdf8; }
+        .btn-home { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; }
     </style>
 </head>
 <body>
-    <h1>📊 मागील ५ दिवसांचा बॅकटिस्ट रिपोर्ट</h1>
-    <table>
-        <tr>
-            <th>स्टॉक</th>
-            <th>तारीख आणि वेळ</th>
-            <th>किंमत (₹)</th>
-        </tr>
-        {% for row in results %}
-        <tr>
-            <td>{{ row.ticker }}</td>
-            <td>{{ row.date }}</td>
-            <td>{{ row.price }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    <br>
-    <a href="/" class="back-link">← मुख्य पेजवर परत जा</a>
+    <h1>📊 विशिष्ट दिवसाची बॅकटेस्ट</h1>
+    
+    <div class="card">
+        <form action="/backtest" method="GET">
+            <label>तारीख निवडा:</label><br>
+            <input type="date" name="date" required>
+            <button type="submit">रिपोर्ट पहा</button>
+        </form>
+    </div>
+
+    {% if results %}
+        <table>
+            <thead>
+                <tr>
+                    <th>स्टॉक</th>
+                    <th>वेळ</th>
+                    <th>किंमत (₹)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for res in results %}
+                <tr>
+                    <td>{{ res.ticker }}</td>
+                    <td>{{ res.date }}</td>
+                    <td>{{ res.price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif request.args.get('date') %}
+        <p style="margin-top: 20px;">दिलेल्या तारखेसाठी कोणतेही सिग्नल सापडले नाहीत.</p>
+    {% endif %}
+
+    <a href="/" class="btn-home">← मुख्य स्क्रीनवर जा</a>
 </body>
 </html>
