@@ -1,52 +1,131 @@
 <!DOCTYPE html>
-<html>
+<html lang="mr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>दत्ता - ट्रेडिंग स्कॅनर</title>
+    <title>दत्ता ट्रेडिंग बॉट - लाईव्ह स्कॅनर</title>
+    <meta http-equiv="refresh" content="60">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    
     <style>
-        body { background-color: #0d1117; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 20px; }
-        .btn-bt { background-color: #238636; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; margin: 20px 0; }
-        .container { display: flex; flex-wrap: wrap; justify-content: center; }
-        .card { background: #161b22; border: 1px solid #30363d; margin: 10px; padding: 15px; border-radius: 12px; cursor: pointer; width: 140px; transition: 0.3s; }
-        .card:hover { border-color: #58a6ff; }
-        #chart-container { width: 95%; height: 500px; margin: 20px auto; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 10px;
+        }
+        .btn-backtest {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            transition: 0.3s;
+        }
+        .btn-backtest:hover { background: #059669; }
+
+        .no-stocks {
+            padding: 50px;
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px dashed #475569;
+        }
+
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .stock-card {
+            background: #1e293b;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #334155;
+        }
+
+        .stock-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+
+        .symbol { font-size: 1.2rem; font-weight: 600; color: #fbbf24; }
+        .price { font-size: 1.1rem; color: #4ade80; }
+
+        .chart-container {
+            width: 100%;
+            height: 350px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
-    <h1>📈 दत्ता ट्रेडिंग बॉट</h1>
-    
-    <a href="/backtest" class="btn-bt">📊 बॅकटिस्ट रिपोर्ट पहा</a>
 
-    <div class="container">
+<div class="container">
+    <h1>📈 दत्ता ट्रेडिंग बॉट</h1>
+    <p>लाईव्ह स्कॅनर: सकाळी ९:३० नंतर आपोआप स्टॉक्स दिसतील.</p>
+    
+    <a href="/backtest" class="btn-backtest">📊 बॅकटिस्ट रिपोर्ट पहा</a>
+
+    <div class="stock-grid">
         {% if stocks %}
             {% for stock in stocks %}
-            <div class="card" onclick="changeChart('{{ stock.symbol }}')">
-                <h3>{{ stock.symbol }}</h3>
-                <p>₹{{ stock.price }}</p>
-                <small style="color: #8b949e;">चार्ट पहा</small>
+            <div class="stock-card">
+                <div class="stock-info">
+                    <span class="symbol">{{ stock.symbol }}</span>
+                    <span class="price">₹{{ stock.price }}</span>
+                </div>
+                
+                <div class="chart-container" id="tv-chart-{{ loop.index }}"></div>
+                
+                <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                <script type="text/javascript">
+                    new TradingView.widget({
+                        "width": "100%",
+                        "height": 350,
+                        "symbol": "NSE:{{ stock.symbol.replace('.NS', '') }}",
+                        "interval": "5",
+                        "timezone": "Asia/Kolkata",
+                        "theme": "dark",
+                        "style": "1",
+                        "locale": "in",
+                        "toolbar_bg": "#f1f3f6",
+                        "enable_publishing": false,
+                        "hide_side_toolbar": true,
+                        "allow_symbol_change": true,
+                        "container_id": "tv-chart-{{ loop.index }}"
+                    });
+                </script>
             </div>
             {% endfor %}
         {% else %}
-            <p style="color: #8b949e;">सध्या कोणताही स्टॉक सापडला नाही. (मार्केट सुरू असताना तपासा)</p>
+            <div class="no-stocks">
+                <h3>सध्या कोणताही स्टॉक सापडला नाही.</h3>
+                <p>(तुमची स्ट्रॅटेजी: Daily Open <= Prev Low + 3 Red Candles जुळली की इथे स्टॉक दिसेल)</p>
+            </div>
         {% endif %}
     </div>
+</div>
 
-    <div id="chart-container">
-        <div id="tradingview_widget" style="height: 100%;"></div>
-    </div>
-
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-        function changeChart(sym) {
-            let ticker = sym.replace('.NS', '');
-            new TradingView.widget({
-                "width": "100%", "height": "100%", "symbol": "NSE:" + ticker,
-                "interval": "5", "timezone": "Asia/Kolkata", "theme": "dark",
-                "style": "1", "container_id": "tradingview_widget"
-            });
-        }
-        changeChart('NIFTY'); // सुरुवातीला निफ्टी दिसेल
-    </script>
 </body>
 </html>
