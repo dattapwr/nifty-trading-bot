@@ -2,12 +2,11 @@ import yfinance as yf
 import requests
 import os
 import pytz
-from datetime import datetime, time
-from flask import Flask, render_template
+from datetime import datetime, time, timedelta
+from flask import Flask, render_template, request
 
 app = Flask(__name__)
 
-# --- तुमची माहिती ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
@@ -15,7 +14,6 @@ IST = pytz.timezone('Asia/Kolkata')
 SIGNAL_HISTORY = []
 REPORT_SENT = False
 
-# सेक्टर्स आणि टॉप १० स्टॉक्स
 SECTORS = {
     '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 'HEROMOTOCO.NS', 'ASHOKLEY.NS', 'TVSMOTOR.NS', 'BALKRISIND.NS', 'BHARATFORG.NS'],
     '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'INDUSINDBK.NS', 'BANKBARODA.NS', 'FEDERALBNK.NS', 'IDFCFIRSTB.NS', 'AUBANK.NS'],
@@ -59,19 +57,37 @@ def check_strategy(ticker, side):
     except: return None
     return None
 
+def run_backtest(days=7):
+    results = []
+    # वेळ वाचवण्यासाठी प्रत्येक सेक्टरमधील प्रमुख स्टॉक्स तपासणे
+    for s_code, tickers in SECTORS.items():
+        for t in tickers[:3]: 
+            try:
+                df = yf.download(t, period=f'{days}d', interval='5m', progress=False, threads=False)
+                for i in range(2, len(df)):
+                    c0, c1, c2 = df.iloc[i], df.iloc[i-1], df.iloc[i-2]
+                    is_inside = (float(c1['High']) < float(c2['High'])) and (float(c1['Low']) > float(c2['Low']))
+                    if is_inside:
+                        time_str = df.index[i].astimezone(IST).strftime('%d-%m %H:%M')
+                        if float(c0['Close']) > float(c1['High']):
+                            results.append({'t': time_str, 's': t, 'type': 'BUY', 'p': round(float(c0['Close']), 2)})
+                        elif float(c0['Close']) < float(c1['Low']):
+                            results.append({'t': time_str, 's': t, 'type': 'SELL', 'p': round(float(c0['Close']), 2)})
+            except: continue
+    return sorted(results, key=lambda x: x['t'], reverse=True)
+
 @app.route('/')
 def home():
     global REPORT_SENT
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    found_stocks, h2, l2 = [], [], []
     
-    market_active = time(9, 15) <= curr_time <= time(15, 30)
+    # बॅकटेस्ट विनंती आहे का?
+    show_bt = request.args.get('bt')
+    bt_results = run_backtest() if show_bt else []
 
-    # सकाळी हिस्टरी रिसेट
-    if curr_time < time(9, 10):
-        SIGNAL_HISTORY.clear()
-        REPORT_SENT = False
+    found_stocks, h2, l2 = [], [], []
+    market_active = time(9, 15) <= curr_time <= time(15, 30)
 
     if market_active:
         h2, l2 = get_top_sectors()
@@ -81,21 +97,12 @@ def home():
                     res = check_strategy(t, side)
                     if res:
                         found_stocks.append(res)
-                        # नवीन सिग्नल असल्यास हिस्ट्रीत टाकणे आणि मेसेज पाठवणे
                         if not any(x['s'] == t and x['type'] == side and x['t'][:5] == res['t'][:5] for x in SIGNAL_HISTORY):
                             SIGNAL_HISTORY.append(res)
-                            icon = "🚀" if side == "BUY" else "📉"
-                            send_telegram(f"{icon} *{side}:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}\n⏰ Time: {res['t']}")
+                            send_telegram(f"{'🚀' if side=='BUY' else '📉'} *{side}:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}")
 
-    # ३:३० नंतर डेली रिपोर्ट
-    if curr_time > time(15, 30) and not REPORT_SENT and SIGNAL_HISTORY:
-        report_msg = "📋 *Today's Signal Report:*\n\n"
-        for h in SIGNAL_HISTORY:
-            report_msg += f"• {h['t'][:5]} | {h['s']} | {h['type']} @ {h['p']}\n"
-        send_telegram(report_msg)
-        REPORT_SENT = True
-
-    return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], h2=h2, l2=l2, market_open=market_active,
+    return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
+                           bt_results=bt_results, market_open=market_active,
                            date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
