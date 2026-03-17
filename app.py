@@ -7,75 +7,56 @@ from flask import Flask, render_template, request
 app = Flask(__name__)
 IST = pytz.timezone('Asia/Kolkata')
 
-# बैकटेस्ट के लिए उपलब्ध स्टॉक्स की लिस्ट
-AVAILABLE_STOCKS = ['TATAMOTORS.NS', 'RELIANCE.NS', 'SBIN.NS', 'INFY.NS', 'TCS.NS', 'ITC.NS', 'LT.NS', 'ICICIBANK.NS', 'HDFCBANK.NS', 'M&M.NS', 'AXISBANK.NS']
+# बॅकटेस्टिंगसाठी प्रमुख स्टॉक्स
+STOCKS = ['TATAMOTORS.NS', 'RELIANCE.NS', 'SBIN.NS', 'INFY.NS', 'TCS.NS', 'ITC.NS', 'LT.NS', 'ICICIBANK.NS', 'HDFCBANK.NS']
 
-def get_optimized_pnl_report(selected_stocks, start_date, end_date):
+def get_filtered_backtest(start_date, end_date):
     results = []
-    investment = 50000 
-    brokerage = 40 
     end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
     
-    for ticker in selected_stocks:
+    for ticker in STOCKS:
         try:
-            df = yf.download(ticker, start=start_date, end=end_dt.strftime('%Y-%m-%d'), interval='5m', progress=False, threads=False)
+            # १. इंट्राडे डेटा (५ मिनिटे)
+            df = yf.download(ticker, start=start_date, end=end_dt.strftime('%Y-%m-%d'), interval='5m', progress=False)
             if df.empty: continue
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
+            # २. डेली डेटा (कालचा क्लोज शोधण्यासाठी)
             daily = yf.download(ticker, start=start_date, end=end_dt.strftime('%Y-%m-%d'), interval='1d', progress=False)
-            df['date'] = df.index.date
-            tv_symbol = f"NSE:{ticker.replace('.NS', '')}"
 
-            for date in df['date'].unique():
-                day_df = df[df['date'] == date].copy()
-                green_vols = []
+            for i in range(1, len(df)):
+                curr_dt = df.index[i].astimezone(IST)
+                # ९:३० नंतरचे सिग्नल्स पाहणे
+                if curr_dt.time() < datetime.strptime("09:30", "%H:%M").time(): continue
 
-                for i in range(1, len(day_df)):
-                    curr_row = day_df.iloc[i]
-                    prev_row = day_df.iloc[i-1]
-                    curr_dt = curr_row.name.astimezone(IST)
+                # --- अट: स्टॉक कालच्या क्लोजिंग पेक्षा खाली पाहिजे ---
+                try:
+                    today_str = curr_dt.strftime('%Y-%m-%d')
+                    prev_close = daily.loc[:today_str].iloc[-2]['Close']
+                    if float(df.iloc[i]['Close']) >= prev_close: continue
+                except: continue
 
-                    if curr_dt.time() < datetime.strptime("09:30", "%H:%M").time(): continue
+                # ३. स्ट्रॅटेजी: ग्रीन कॅन्डल लो ब्रेकआऊट
+                prev = df.iloc[i-1] 
+                curr = df.iloc[i]   
 
-                    # नेगेटिव ट्रेंड चेक
-                    try:
-                        prev_close = daily.loc[:curr_dt.strftime('%Y-%m-%d')].iloc[-2]['Close']
-                        if float(curr_row['Close']) >= prev_close: continue
-                    except: continue
+                is_green = float(prev['Close']) > float(prev['Open'])
+                is_red = float(curr['Close']) < float(curr['Open'])
+                breakout = float(curr['Close']) < float(prev['Low'])
 
-                    # सकाळपासूनची Lowest Volume Green Candle
-                    is_green = float(prev_row['Close']) > float(prev_row['Open'])
-                    if is_green:
-                        v = float(prev_row['Volume'])
-                        is_lowest = not green_vols or v < min(green_vols)
-                        green_vols.append(v)
+                if is_green and is_red and breakout:
+                    entry = round(float(curr['Close']), 2)
+                    sl = round(float(prev['High']), 2) # हिरव्या कॅन्डलचा हाय (SL)
+                    risk = sl - entry
+                    target = round(entry - (risk * 2), 2) # १:२ टार्गेट
 
-                        # ब्रेकआउट (लाल कैंडल द्वारा लो तोड़ना)
-                        if float(curr_row['Close']) < float(curr_row['Open']) and \
-                           float(curr_row['Close']) < float(prev_row['Low']) and is_lowest:
-                            
-                            entry = float(curr_row['Close'])
-                            sl = float(prev_row['High'])
-                            target = entry - ((sl - entry) * 2)
-                            qty = int(investment / entry)
-                            
-                            outcome, pnl = "Wait..", 0
-                            for j in range(i + 1, len(day_df)):
-                                if float(day_df.iloc[j]['High']) >= sl:
-                                    outcome, pnl = "SL ❌", -(sl - entry) * qty - brokerage
-                                    break
-                                if float(day_df.iloc[j]['Low']) <= target:
-                                    outcome, pnl = "TGT ✅", (entry - target) * qty - brokerage
-                                    break
-
-                            results.append({
-                                't': curr_dt.strftime('%d-%b %H:%M'),
-                                's': ticker,
-                                'p': round(entry, 2),
-                                'res': outcome,
-                                'pnl': round(pnl, 2),
-                                'tv_url': f"https://www.tradingview.com/chart/?symbol={tv_symbol}"
-                            })
+                    results.append({
+                        't': curr_dt.strftime('%d-%m %H:%M'),
+                        's': ticker,
+                        'p': entry,
+                        'sl': sl,
+                        'tgt': target
+                    })
         except: continue
     return sorted(results, key=lambda x: x['t'], reverse=True)
 
@@ -83,12 +64,8 @@ def get_optimized_pnl_report(selected_stocks, start_date, end_date):
 def home():
     start = request.args.get('start_date')
     end = request.args.get('end_date')
-    selected = request.args.getlist('stocks')
-    
-    bt_results = get_optimized_pnl_report(selected, start, end) if start and end and selected else []
-    total_pnl = sum(r['pnl'] for r in bt_results)
-    
-    return render_template('index.html', bt_results=bt_results, total_pnl=total_pnl, available_stocks=AVAILABLE_STOCKS)
+    bt_results = get_filtered_backtest(start, end) if start and end else []
+    return render_template('index.html', bt_results=bt_results)
 
 if __name__ == "__main__":
     app.run()
