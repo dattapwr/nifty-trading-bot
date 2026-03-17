@@ -7,13 +7,15 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
+# --- तुमची माहिती ---
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
-REPORT_SENT = False # रिपोर्ट एकदाच पाठवण्यासाठी
+REPORT_SENT = False
 
+# सेक्टर्स आणि टॉप १० स्टॉक्स
 SECTORS = {
     '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 'HEROMOTOCO.NS', 'ASHOKLEY.NS', 'TVSMOTOR.NS', 'BALKRISIND.NS', 'BHARATFORG.NS'],
     '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'INDUSINDBK.NS', 'BANKBARODA.NS', 'FEDERALBNK.NS', 'IDFCFIRSTB.NS', 'AUBANK.NS'],
@@ -66,28 +68,28 @@ def home():
     
     market_active = time(9, 15) <= curr_time <= time(15, 30)
 
-    # सकाळी हिस्टरी रिसेट करणे
+    # सकाळी हिस्टरी रिसेट
     if curr_time < time(9, 10):
         SIGNAL_HISTORY.clear()
         REPORT_SENT = False
 
     if market_active:
         h2, l2 = get_top_sectors()
-        # BUY/SELL स्कॅनिंग लॉजिक (Duplicate चेकसह)
         for s_list, side in [(h2, "BUY"), (l2, "SELL")]:
             for s in s_list:
                 for t in SECTORS[s['full_code']]:
                     res = check_strategy(t, side)
                     if res:
                         found_stocks.append(res)
+                        # नवीन सिग्नल असल्यास हिस्ट्रीत टाकणे आणि मेसेज पाठवणे
                         if not any(x['s'] == t and x['type'] == side and x['t'][:5] == res['t'][:5] for x in SIGNAL_HISTORY):
                             SIGNAL_HISTORY.append(res)
                             icon = "🚀" if side == "BUY" else "📉"
                             send_telegram(f"{icon} *{side}:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}\n⏰ Time: {res['t']}")
 
-    # ३:३० नंतर डेली रिपोर्ट पाठवणे
+    # ३:३० नंतर डेली रिपोर्ट
     if curr_time > time(15, 30) and not REPORT_SENT and SIGNAL_HISTORY:
-        report_msg = "📋 *Today's Daily Report:*\n\n"
+        report_msg = "📋 *Today's Signal Report:*\n\n"
         for h in SIGNAL_HISTORY:
             report_msg += f"• {h['t'][:5]} | {h['s']} | {h['type']} @ {h['p']}\n"
         send_telegram(report_msg)
