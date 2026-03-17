@@ -7,12 +7,10 @@ from flask import Flask, render_template, request
 app = Flask(__name__)
 IST = pytz.timezone('Asia/Kolkata')
 
-# निफ्टी ५० मधील टॉप २० स्टॉक्स
-STOCKS = ['TATAMOTORS.NS', 'RELIANCE.NS', 'SBIN.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 
-          'INFY.NS', 'TCS.NS', 'ITC.NS', 'LT.NS', 'AXISBANK.NS', 'M&M.NS', 'BAJAJ-AUTO.NS',
-          'BHARTIARTL.NS', 'KOTAKBANK.NS', 'ASIANPAINT.NS', 'TITAN.NS', 'MARUTI.NS', 'SUNPHARMA.NS']
+# मोजके ५ स्टॉक्स (आधी हे ५ चालवून पाहूया)
+STOCKS = ['TATAMOTORS.NS', 'RELIANCE.NS', 'SBIN.NS', 'INFY.NS', 'TCS.NS']
 
-def run_price_action_backtest(start_date, end_date):
+def get_data_and_test(start_date, end_date):
     results = []
     # yfinance साठी एंड डेट १ दिवसाने वाढवणे
     end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
@@ -20,40 +18,42 @@ def run_price_action_backtest(start_date, end_date):
 
     for ticker in STOCKS:
         try:
+            # डेटा डाऊनलोड (सिम्पल पद्धत)
             df = yf.download(ticker, start=start_date, end=end_str, interval='5m', progress=False)
-            if df.empty or len(df) < 10: continue
+            
+            if df.empty: continue
+            
+            # डेटा क्लीनिंग (Multi-index हटवणे जर असेल तर)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
 
-            for i in range(5, len(df)):
-                # १. वेळ तपासणे (९:३० नंतर)
+            for i in range(1, len(df)):
+                # वेळ ९:३० नंतरची आहे का?
                 curr_time = df.index[i].astimezone(IST).time()
                 if curr_time < datetime.strptime("09:30", "%H:%M").time():
                     continue
 
-                prev_5 = df.iloc[i-5:i] # मागील ५ कॅन्डल
-                green_candle = df.iloc[i-1] # हिरवी कॅन्डल (जिचा Low आपल्याला पाहायचा आहे)
-                red_candle = df.iloc[i]   # सध्याची लाल कॅन्डल (Breakout)
+                prev = df.iloc[i-1] # आधीची कॅन्डल
+                curr = df.iloc[i]   # सध्याची कॅन्डल
 
-                # अट १: डाउन ट्रेंड (मागील ५ पैकी ३ कॅन्डल लाल असाव्यात)
-                down_trend = (prev_5['Close'] < prev_5['Open']).sum() >= 3
-                
-                # अट २: मागील कॅन्डल हिरवी (Green) असावी
-                is_green = green_candle['Close'] > green_candle['Open']
-                
-                # अट ३: सध्याची कॅन्डल लाल (Red) असावी आणि हिरव्या कॅन्डलच्या Low च्या खाली क्लोज व्हावी
-                is_red = red_candle['Close'] < red_candle['Open']
-                breakout_down = red_candle['Close'] < green_candle['Low']
+                # स्ट्रॅटेजी: हिरवी कॅन्डल नंतर लाल कॅन्डलने हिरव्याचा 'Low' तोडणे
+                is_green = float(prev['Close']) > float(prev['Open'])
+                is_red = float(curr['Close']) < float(curr['Open'])
+                breakout = float(curr['Close']) < float(prev['Low'])
 
-                if down_trend and is_green and is_red and breakout_down:
-                    time_val = df.index[i].astimezone(IST).strftime('%d-%m %H:%M')
+                if is_green and is_red and breakout:
+                    dt_str = df.index[i].astimezone(IST).strftime('%d-%m %H:%M')
                     results.append({
-                        't': time_val,
+                        't': dt_str,
                         's': ticker,
                         'type': 'SELL (Downside)',
-                        'p': round(float(red_candle['Close']), 2),
-                        'low': round(float(green_candle['Low']), 2)
+                        'p': round(float(curr['Close']), 2),
+                        'l': round(float(prev['Low']), 2)
                     })
-        except: continue
-    
+        except Exception as e:
+            print(f"Error for {ticker}: {e}")
+            continue
+            
     return sorted(results, key=lambda x: x['t'], reverse=True)
 
 @app.route('/')
@@ -62,7 +62,7 @@ def home():
     end = request.args.get('end_date')
     bt_results = []
     if start and end:
-        bt_results = run_price_action_backtest(start, end)
+        bt_results = get_data_and_test(start, end)
     return render_template('index.html', bt_results=bt_results)
 
 if __name__ == "__main__":
