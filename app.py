@@ -14,89 +14,93 @@ IST = pytz.timezone('Asia/Kolkata')
 
 LAST_ALERTS = {}
 
-# स्टॉक्सची यादी (कमी स्टॉक्स ठेवल्यास स्कॅनिंग फास्ट होईल)
-STOCKS_TO_SCAN = [
-    'TATAMOTORS.NS', 'M&M.NS', 'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 
-    'INFY.NS', 'TCS.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'AXISBANK.NS', 
-    'JINDALSTEL.NS', 'TATASTEEL.NS', 'SUNPHARMA.NS', 'ITC.NS'
-]
+# सेक्टर आणि त्यातील प्रमुख स्टॉक्स
+SECTORS = {
+    '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'ASHOKLEY.NS', 'BAJAJ-AUTO.NS'],
+    '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS'],
+    '^CNXIT': ['TCS.NS', 'INFY.NS', 'HCLTECH.NS', 'WIPRO.NS', 'TECHM.NS'],
+    '^CNXPHARMA': ['SUNPHARMA.NS', 'CIPLA.NS', 'DRREDDY.NS', 'LUPIN.NS'],
+    '^CNXMETAL': ['TATASTEEL.NS', 'JINDALSTEL.NS', 'HINDALCO.NS', 'JSWSTEEL.NS'],
+    '^CNXFMCG': ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS'],
+    '^CNXINFRA': ['LT.NS', 'RELIANCE.NS', 'ADANIPORTS.NS', 'GRASIM.NS'],
+    '^CNXENERGY': ['ONGC.NS', 'NTPC.NS', 'POWERGRID.NS', 'BPCL.NS']
+}
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    try:
-        requests.get(url, params=params, timeout=5)
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+    try: requests.get(url, params=params, timeout=5)
+    except: pass
 
-def scan_stocks():
-    found = []
-    now_ist = datetime.now(IST)
-    now_time = now_ist.time()
-    
-    # ९:३० ते ३:३० दरम्यान (मार्केट वेळ)
-    if not (time(9, 30) <= now_time <= time(15, 30)):
-        return []
-
-    for t in STOCKS_TO_SCAN:
+def get_top_sectors():
+    performance = []
+    for s_code in SECTORS.keys():
         try:
-            # ५ मिनिटांच्या कॅन्डलचा डेटा
-            df = yf.download(t, period='2d', interval='5m', progress=False)
-            # डेली डेटा (कालचा High/Low साठी)
-            daily = yf.download(t, period='5d', interval='1d', progress=False)
-            
-            if len(df) < 5 or len(daily) < 2: continue
-            
-            # कालचा डेटा (Daily)
-            prev_high = daily['High'].iloc[-2]
-            prev_low = daily['Low'].iloc[-2]
-            
-            # आजचा डेटा
-            today_open = df['Open'].iloc[0]
-            c0 = df.iloc[-1] # चालू कॅन्डल
-            c1 = df.iloc[-2] # इनसाईड कॅन्डल
-            c2 = df.iloc[-3] # बाहेरची कॅन्डल (Mother Candle)
+            # १ दिवसाचा डेटा घेऊन बदल मोजणे
+            d = yf.download(s_code, period='1d', interval='15m', progress=False)
+            if not d.empty:
+                change = ((d['Close'].iloc[-1] - d['Open'].iloc[0]) / d['Open'].iloc[0]) * 100
+                performance.append({'code': s_code.replace('^CNX', ''), 'change': change, 'full_code': s_code})
+        except: continue
+    
+    performance.sort(key=lambda x: x['change'], reverse=True)
+    high_2 = performance[:2]
+    low_2 = performance[-2:]
+    return high_2, low_2
 
-            tm = now_ist.strftime('%H:%M')
-
-            # १. BUY LOGIC: आज ओपनिंग कालच्या हायच्या वर आहे?
-            if today_open > prev_high:
-                # Inside Candle अटी: c1 ही c2 च्या आत आहे का?
-                is_inside = (c1['High'] < c2['High']) and (c1['Low'] > c2['Low'])
-                # Breakout: चालू प्राईस c1 च्या हायच्या वर गेली का?
-                if is_inside and (c0['Close'] > c1['High']):
-                    alert_key = f"{t}_BUY_{now_ist.hour}_{now_ist.minute//15}"
-                    if alert_key not in LAST_ALERTS:
-                        msg = f"🚀 *BUY ALERT!* 🚀\n\n🏢 *Stock:* `{t}`\n💰 *Price:* ₹{round(c0['Close'], 2)}\n⏰ *Time:* {tm}"
-                        send_telegram(msg)
-                        LAST_ALERTS[alert_key] = True
-                    found.append({'s': t, 'p': round(c0['Close'], 2), 't': tm, 'type': 'BUY'})
-
-            # २. SELL LOGIC: आज ओपनिंग कालच्या लोच्या खाली आहे?
-            elif today_open < prev_low:
-                is_inside = (c1['High'] < c2['High']) and (c1['Low'] > c2['Low'])
-                # Breakdown: चालू प्राईस c1 च्या लोच्या खाली गेली का?
-                if is_inside and (c0['Close'] < c1['Low']):
-                    alert_key = f"{t}_SELL_{now_ist.hour}_{now_ist.minute//15}"
-                    if alert_key not in LAST_ALERTS:
-                        msg = f"📉 *SELL ALERT!* 📉\n\n🏢 *Stock:* `{t}`\n💰 *Price:* ₹{round(c0['Close'], 2)}\n⏰ *Time:* {tm}"
-                        send_telegram(msg)
-                        LAST_ALERTS[alert_key] = True
-                    found.append({'s': t, 'p': round(c0['Close'], 2), 't': tm, 'type': 'SELL'})
-
-        except Exception as e:
-            print(f"Error scanning {t}: {e}")
-            continue
-    return found
+def check_strategy(ticker, side):
+    try:
+        df = yf.download(ticker, period='1d', interval='5m', progress=False)
+        if len(df) < 3: return None
+        
+        c0, c1, c2 = df.iloc[-1], df.iloc[-2], df.iloc[-3]
+        # Inside Candle: c1 candle c2 च्या आत हवी
+        is_inside = (c1['High'] < c2['High']) and (c1['Low'] > c2['Low'])
+        
+        tm = datetime.now(IST).strftime('%H:%M')
+        
+        if side == "BUY" and is_inside and (c0['Close'] > c1['High']):
+            return {'s': ticker, 'p': round(c0['Close'], 2), 't': tm, 'type': 'BUY'}
+        
+        if side == "SELL" and is_inside and (c0['Close'] < c1['Low']):
+            return {'s': ticker, 'p': round(c0['Close'], 2), 't': tm, 'type': 'SELL'}
+    except: return None
+    return None
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
-    stocks_data = scan_stocks()
-    return render_template('index.html', 
-                           stocks=stocks_data, 
+    found_stocks = []
+    h2, l2 = [], []
+
+    # मार्केट वेळ: ९:१५ ते ३:३०
+    if time(9, 15) <= now_ist.time() <= time(15, 30):
+        h2, l2 = get_top_sectors()
+        
+        # BUY: फक्त वाढणाऱ्या सेक्टर्समधील स्टॉक्स स्कॅन करणे
+        for s in h2:
+            for t in SECTORS[s['full_code']]:
+                res = check_strategy(t, "BUY")
+                if res: 
+                    found_stocks.append(res)
+                    if f"{t}_B" not in LAST_ALERTS:
+                        send_telegram(f"🚀 *BUY ALERT:* `{t}`\n💰 Price: ₹{res['p']}\n📊 Sector: {s['code']}")
+                        LAST_ALERTS[f"{t}_B"] = True
+
+        # SELL: फक्त पडणाऱ्या सेक्टर्समधील स्टॉक्स स्कॅन करणे
+        for s in l2:
+            for t in SECTORS[s['full_code']]:
+                res = check_strategy(t, "SELL")
+                if res: 
+                    found_stocks.append(res)
+                    if f"{t}_S" not in LAST_ALERTS:
+                        send_telegram(f"📉 *SELL ALERT:* `{t}`\n💰 Price: ₹{res['p']}\n📊 Sector: {s['code']}")
+                        LAST_ALERTS[f"{t}_S"] = True
+
+    return render_template('index.html', stocks=found_stocks, 
+                           h2=h2, l2=l2,
                            date=now_ist.strftime('%d-%m-%Y'),
-                           current_time=now_ist.strftime('%H:%M:%S'))
+                           time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
