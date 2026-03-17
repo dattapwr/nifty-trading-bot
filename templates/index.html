@@ -2,29 +2,35 @@
 <html lang="mr">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="120">
-    <title>Scanner Pro</title>
+    <title>Scanner Backtest</title>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: white; padding: 10px; }
-        .card { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #38bdf8; }
-        .bt-btn { background: #6366f1; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px 0; }
+        body { font-family: sans-serif; background: #0f172a; color: white; padding: 15px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border-bottom: 4px solid #38bdf8; }
+        input[type="date"] { padding: 10px; border-radius: 5px; border: none; margin: 5px; }
+        .btn { background: #6366f1; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e293b; }
-        th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
+        th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
         .buy { color: #4ade80; } .sell { color: #f87171; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>🚀 Live Inside-Bar Scanner</h2>
-        <p>{{ date }} | {{ time }}</p>
-        <a href="/?bt=1" class="bt-btn">📊 ७ दिवसांचे बॅकटेस्ट पहा</a>
-        <a href="/" class="bt-btn" style="background:#334155;">🔄 लाईव्ह स्कॅनर</a>
+        <h2>📊 Custom Range Backtest</h2>
+        <p>वेळ: {{ time }} | तारीख: {{ date }}</p>
+        
+        <form action="/" method="get">
+            <label>सुरुवात:</label>
+            <input type="date" name="start_date" required>
+            <label>शेवट:</label>
+            <input type="date" name="end_date" required>
+            <button type="submit" class="btn">बॅकटेस्ट करा</button>
+        </form>
     </div>
 
     {% if bt_results %}
-        <h3>📜 बॅकटेस्ट रिझल्ट (मागील ७ दिवस)</h3>
+        <h3>📜 रिझल्ट यादी (सिग्नल्स: {{ bt_results|length }})</h3>
         <table>
-            <tr><th>वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
+            <tr><th>तारीख/वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
             {% for r in bt_results %}
             <tr>
                 <td>{{ r.t }}</td>
@@ -34,17 +40,8 @@
             </tr>
             {% endfor %}
         </table>
-    {% else %}
-        <h3>📡 आजचे चालू सिग्नल</h3>
-        {% for s in stocks %}
-            <div class="card" style="border-color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }};">
-                <b>{{ s.s }}</b> - ₹{{ s.p }} ({{ s.type }})
-            </div>
-        {% else %}
-            <p>सध्या कोणतेही सिग्नल नाहीत.</p>
-        {% endfor %}
+    {% elif request.args.get('start_date') %}
+        <p>या तारखेसाठी कोणतेही सिग्नल सापडले नाहीत. कृपया दुसरी तारीख निवडा.</p>
     {% endif %}
-
-    <script>setInterval(function(){ if(!window.location.search.includes('bt')) location.reload(); }, 120000);</script>
 </body>
 </html>
