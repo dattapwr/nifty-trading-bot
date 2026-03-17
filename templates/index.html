@@ -2,60 +2,49 @@
 <html lang="mr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="60"> <title>Nifty Sector Scanner</title>
+    <meta http-equiv="refresh" content="60">
+    <title>Master Sector Scanner</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; padding: 10px; }
-        .header { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-        .sector-box { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 25px; }
-        .tag { padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 0.9em; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .tag-high { background: #064e3b; color: #4ade80; border: 1px solid #059669; }
-        .tag-low { background: #450a0a; color: #f87171; border: 1px solid #dc2626; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 10px; }
-        .card { background: #1e293b; padding: 25px; border-radius: 15px; border-top: 5px solid #38bdf8; transition: 0.3s; }
-        .buy-card { border-top-color: #4ade80; box-shadow: 0 0 15px rgba(74, 222, 128, 0.2); }
-        .sell-card { border-top-color: #f87171; box-shadow: 0 0 15px rgba(248, 113, 113, 0.2); }
-        .price { font-size: 2em; font-weight: bold; margin: 10px 0; }
-        .no-data { padding: 60px; opacity: 0.6; border: 2px dashed #334155; border-radius: 15px; margin: 20px; }
+        body { font-family: sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; padding: 10px; }
+        .tag { padding: 8px 12px; border-radius: 5px; margin: 5px; display: inline-block; font-weight: bold; }
+        .high { background: #064e3b; color: #4ade80; }
+        .low { background: #450a0a; color: #f87171; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 10px; border-top: 5px solid #38bdf8; }
+        .buy { border-color: #4ade80; }
+        .sell { border-color: #f87171; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🚀 Live Sector Scanner</h1>
-        <p>तारीख: {{ date }} | लाइव्ह वेळ: {{ time }}</p>
-        <p style="color: #94a3b8; font-size: 0.8em;">(वेबसाईट दर १ मिनिटाला आपोआप रिफ्रेश होते)</p>
-    </div>
+    <h1>🚀 Live Sector Scanner</h1>
+    <p>वेळ: {{ time }} | तारीख: {{ date }}</p>
 
-    <div class="sector-box">
-        {% for s in h2 %} <div class="tag tag-high">▲ {{ s.code }} ({{ s.change|round(2) }}%)</div> {% endfor %}
-        {% for s in l2 %} <div class="tag tag-low">▼ {{ s.code }} ({{ s.change|round(2) }}%)</div> {% endfor %}
-    </div>
-
-    <div class="grid">
-        {% if stocks %}
-            {% for s in stocks %}
-            <div class="card {{ 'buy-card' if s.type == 'BUY' else 'sell-card' }}">
-                <h2 style="margin:0; color:#38bdf8;">{{ s.s }}</h2>
-                <div class="price">₹{{ s.p }}</div>
-                <div style="background: {{ '#064e3b' if s.type == 'BUY' else '#450a0a' }}; color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }}; padding: 5px; border-radius: 5px; font-weight: bold;">
-                    {{ s.type }} SIGNAL
+    {% if market_open %}
+        <div style="margin-bottom: 20px;">
+            {% for s in h2 %} <span class="tag high">▲ {{ s.code }} ({{ s.change|round(2) }}%)</span> {% endfor %}
+            {% for s in l2 %} <span class="tag low">▼ {{ s.code }} ({{ s.change|round(2) }}%)</span> {% endfor %}
+        </div>
+        <div class="grid">
+            {% if stocks %}
+                {% for s in stocks %}
+                <div class="card {{ 'buy' if s.type == 'BUY' else 'sell' }}">
+                    <h3>{{ s.s }}</h3>
+                    <h2 style="margin: 5px 0;">₹{{ s.p }}</h2>
+                    <b style="color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }}">{{ s.type }} SIGNAL</b>
+                    <p style="font-size: 0.8em; opacity: 0.6;">वेळ: {{ s.t }}</p>
                 </div>
-                <p style="font-size: 0.8em; margin-top: 15px; color: #94a3b8;">वेळ: {{ s.t }}</p>
-                <a href="https://in.tradingview.com/chart/?symbol=NSE:{{ s.s|replace('.NS','') }}" target="_blank" style="color: #38bdf8; text-decoration: none; font-size: 0.9em;">चार्ट पहा →</a>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="no-data">
-                <h3>सध्या कोणताही सिग्नल नाही</h3>
-                <p>टॉप २ सेक्टर्समध्ये Inside Candle ब्रेकआउटची वाट पाहत आहे...</p>
-            </div>
-        {% endif %}
-    </div>
+                {% endfor %}
+            {% else %}
+                <p style="grid-column: 1/-1; padding: 50px; border: 1px dashed #334155;">सध्या टॉप सेक्टर्समध्ये सिग्नल नाही...</p>
+            {% endif %}
+        </div>
+    {% else %}
+        <div style="padding: 100px; opacity: 0.5;">
+            <h3>मार्केट बंद आहे</h3>
+            <p>स्कॅनर ९:१५ AM ते ३:३० PM दरम्यान चालेल.</p>
+        </div>
+    {% endif %}
 
-    <script>
-        setTimeout(function(){
-            window.location.reload(1);
-        }, 60000); // ६०,००० मिलीसेकंद = १ मिनिट
-    </script>
+    <script>setTimeout(function(){ location.reload(); }, 60000);</script>
 </body>
 </html>
