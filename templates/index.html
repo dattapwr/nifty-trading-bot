@@ -1,58 +1,22 @@
-<!DOCTYPE html>
-<html lang="mr">
-<head>
-    <meta charset="UTF-8">
-    <title>Price Action Backtester</title>
-    <style>
-        body { font-family: sans-serif; background: #0f172a; color: white; padding: 15px; }
-        .header { background: #1e293b; padding: 20px; border-radius: 12px; border-bottom: 4px solid #f87171; }
-        .input-group { margin: 10px 0; }
-        input { padding: 8px; border-radius: 5px; border: none; }
-        .btn { background: #ef4444; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e293b; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
-        th { background: #334155; color: #f87171; }
-        .sell-text { color: #f87171; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h2>📉 Downside Breakout Backtester</h2>
-        <p>स्ट्रॅटेजी: डाउन ट्रेंड + हिरवी कॅन्डल + लाल ब्रेकआउट (९:३० नंतर)</p>
-        <form action="/" method="get">
-            <div class="input-group">
-                <label>सुरुवात: </label><input type="date" name="start_date" required>
-                <label> शेवट: </label><input type="date" name="end_date" required>
-                <button type="submit" class="btn">बॅकटेस्ट करा</button>
-            </div>
-        </form>
-    </div>
-
-    {% if bt_results %}
-    <table>
-        <thead>
-            <tr>
-                <th>वेळ</th>
-                <th>स्टॉक</th>
-                <th>सिग्नल</th>
-                <th>ब्रेकआउट किंमत</th>
-                <th>हिरव्या कॅन्डलचा Low</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in bt_results %}
-            <tr>
-                <td>{{ r.t }}</td>
-                <td>{{ r.s }}</td>
-                <td class="sell-text">{{ r.type }}</td>
-                <td>₹{{ r.p }}</td>
-                <td>₹{{ r.low }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% elif request.args.get('start_date') %}
-    <p style="margin-top: 20px; color: #94a3b8;">या कालावधीत अटी पूर्ण करणारे सिग्नल सापडले नाहीत.</p>
-    {% endif %}
-</body>
-</html>
+<table>
+    <thead>
+        <tr>
+            <th>वेळ</th>
+            <th>स्टॉक</th>
+            <th>एंट्री किंमत</th>
+            <th>Stop Loss (SL)</th>
+            <th>Target (1:2)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in bt_results %}
+        <tr>
+            <td>{{ r.t }}</td>
+            <td>**{{ r.s }}**</td>
+            <td style="color: #f87171;">₹{{ r.p }}</td>
+            <td style="color: #fbbf24;">₹{{ r.sl }}</td>
+            <td style="color: #4ade80;">₹{{ r.tgt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
