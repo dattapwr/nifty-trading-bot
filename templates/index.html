@@ -2,29 +2,30 @@
 <html lang="mr">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="120"> <title>High Volume Sector Scanner</title>
+    <meta http-equiv="refresh" content="120">
+    <title>Scanner 2.0</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; padding: 10px; }
-        .tag { padding: 8px 12px; border-radius: 5px; margin: 5px; display: inline-block; font-weight: bold; font-size: 0.85em; }
-        .high { background: #064e3b; color: #4ade80; border: 1px solid #059669; }
-        .low { background: #450a0a; color: #f87171; border: 1px solid #dc2626; }
+        body { font-family: sans-serif; background: #0f172a; color: white; text-align: center; padding: 10px; margin: 0; }
+        .header { background: #1e293b; padding: 20px; border-radius: 0 0 20px 20px; margin-bottom: 20px; border-bottom: 4px solid #38bdf8; }
+        .tag { padding: 8px 12px; border-radius: 5px; margin: 5px; display: inline-block; font-weight: bold; font-size: 0.8em; }
+        .high { background: #064e3b; color: #4ade80; }
+        .low { background: #450a0a; color: #f87171; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; padding: 20px; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; border-top: 6px solid #38bdf8; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; border-top: 6px solid #38bdf8; }
         .buy { border-color: #4ade80; }
         .sell { border-color: #f87171; }
-        .btn { background: #38bdf8; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; margin: 15px 0; }
+        .btn { background: #38bdf8; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; margin-top: 15px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div style="background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+    <div class="header">
         <h1>🚀 Live Sector Scanner</h1>
         <p>वेळ: <b>{{ time }}</b> | तारीख: {{ date }}</p>
         <button class="btn" onclick="location.reload()">🔄 Refresh Now</button>
-        <p style="font-size: 0.8em; color: #94a3b8;">(पुढील ऑटो-रिफ्रेश २ मिनिटांनी होईल)</p>
     </div>
 
     {% if market_open %}
-        <div style="margin: 15px 0;">
+        <div>
             {% for s in h2 %} <span class="tag high">▲ {{ s.code }} ({{ s.change|round(2) }}%)</span> {% endfor %}
             {% for s in l2 %} <span class="tag low">▼ {{ s.code }} ({{ s.change|round(2) }}%)</span> {% endfor %}
         </div>
@@ -33,33 +34,29 @@
             {% if stocks %}
                 {% for s in stocks %}
                 <div class="card {{ 'buy' if s.type == 'BUY' else 'sell' }}">
-                    <h2 style="margin:0; color: #38bdf8;">{{ s.s }}</h2>
-                    <h1 style="margin: 10px 0; font-size: 2.5em;">₹{{ s.p }}</h1>
-                    <div style="background: {{ '#064e3b' if s.type == 'BUY' else '#450a0a' }}; color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }}; padding: 8px; border-radius: 5px; font-weight: bold;">
+                    <h2 style="margin:0;">{{ s.s }}</h2>
+                    <h1 style="font-size: 2.5em; margin: 10px 0;">₹{{ s.p }}</h1>
+                    <div style="background: {{ '#064e3b' if s.type == 'BUY' else '#450a0a' }}; color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }}; padding: 10px; border-radius: 8px; font-weight: bold;">
                         {{ s.type }} SIGNAL
                     </div>
-                    <p style="font-size: 0.8em; margin-top: 15px; opacity: 0.7;">सिग्नल वेळ: {{ s.t }}</p>
+                    <p style="font-size: 0.8em; margin-top: 15px; opacity: 0.6;">वेळ: {{ s.t }}</p>
                 </div>
                 {% endfor %}
             {% else %}
-                <div style="grid-column: 1/-1; padding: 60px; border: 2px dashed #334155; border-radius: 15px; opacity: 0.6;">
-                    <h3>सध्या कोणताही 'Inside Candle' ब्रेकआउट नाही</h3>
-                    <p>सिस्टीम ८० स्टॉक्स स्कॅन करत आहे...</p>
+                <div style="grid-column: 1/-1; padding: 50px; border: 2px dashed #334155; border-radius: 15px; opacity: 0.5;">
+                    <h3>सध्या अट पूर्ण करणारा स्टॉक नाही...</h3>
                 </div>
             {% endif %}
         </div>
     {% else %}
         <div style="padding: 100px; opacity: 0.5;">
             <h2>मार्केट बंद आहे</h2>
-            <p>स्कॅनर ९:१५ AM ते ३:३० PM दरम्यान चालेल.</p>
+            <p>९:१५ ला पुन्हा भेटू!</p>
         </div>
     {% endif %}
 
     <script>
-        // दर २ मिनिटांनी पेज रिफ्रेश करणे
-        setInterval(function(){ 
-            location.reload(true); 
-        }, 120000);
+        setInterval(function(){ location.reload(true); }, 120000);
     </script>
 </body>
 </html>
