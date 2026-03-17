@@ -3,51 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="120">
-    <title>Pro Stock Scanner</title>
+    <title>Scanner Pro</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: auto; }
-        .card { background: #1e293b; padding: 15px; border-radius: 12px; margin-bottom: 15px; border-bottom: 4px solid #38bdf8; }
-        .tag { padding: 5px 10px; border-radius: 4px; font-size: 0.8em; font-weight: bold; margin: 2px; display: inline-block; }
-        .buy-text { color: #4ade80; } .sell-text { color: #f87171; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e293b; border-radius: 10px; }
+        .header-card { background: #1e293b; padding: 15px; border-radius: 12px; margin-bottom: 20px; border-bottom: 4px solid #38bdf8; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-bottom: 30px; }
+        .stock-card { background: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #38bdf8; }
+        .buy { border-color: #4ade80; }
+        .sell { border-color: #f87171; }
+        .tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; margin: 2px; display: inline-block; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; font-size: 0.9em; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; }
-        th { background: #334155; }
+        th { background: #334155; color: #38bdf8; }
+        .buy-txt { color: #4ade80; font-weight: bold; }
+        .sell-txt { color: #f87171; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="card">
-            <h2>🚀 Live Inside-Bar Scanner</h2>
-            <p>{{ date }} | <b>{{ time }}</b></p>
-            {% for s in h2 %} <span class="tag" style="background: #064e3b; color: #4ade80;">▲ {{ s.code }}</span> {% endfor %}
-            {% for s in l2 %} <span class="tag" style="background: #450a0a; color: #f87171;">▼ {{ s.code }}</span> {% endfor %}
+        <div class="header-card">
+            <h2 style="margin:0;">🚀 Live Inside-Bar Scanner</h2>
+            <p style="opacity:0.7;">{{ date }} | {{ time }}</p>
+            <div>
+                {% for s in h2 %} <span class="tag" style="background: #064e3b; color: #4ade80;">▲ {{ s.code }}</span> {% endfor %}
+                {% for s in l2 %} <span class="tag" style="background: #450a0a; color: #f87171;">▼ {{ s.code }}</span> {% endfor %}
+            </div>
         </div>
 
         <h3>📡 चालू सिग्नल</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px;">
+        <div class="grid">
             {% for s in stocks %}
-            <div class="card" style="border-color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }};">
+            <div class="stock-card {{ 'buy' if s.type == 'BUY' else 'sell' }}">
                 <b>{{ s.s }}</b><br>
-                <span style="font-size: 1.5em;">₹{{ s.p }}</span><br>
-                <span class="{{ 'buy-text' if s.type == 'BUY' else 'sell-text' }}">{{ s.type }}</span>
+                <span style="font-size: 1.4em;">₹{{ s.p }}</span><br>
+                <span class="{{ 'buy-txt' if s.type == 'BUY' else 'sell-txt' }}">{{ s.type }} SIGNAL</span>
             </div>
             {% else %}
             <p style="opacity: 0.5;">सध्या कोणतेही ब्रेकआउट नाहीत.</p>
             {% endfor %}
         </div>
 
-        <h3>📜 आजची हिस्टरी</h3>
+        <h3 style="margin-top: 40px;">📜 आजची हिस्टरी</h3>
         <table>
-            <tr><th>वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
-            {% for h in history %}
-            <tr>
-                <td>{{ h.t }}</td>
-                <td>{{ h.s }}</td>
-                <td class="{{ 'buy-text' if h.type == 'BUY' else 'sell-text' }}">{{ h.type }}</td>
-                <td>₹{{ h.p }}</td>
-            </tr>
-            {% endfor %}
+            <thead>
+                <tr><th>वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
+            </thead>
+            <tbody>
+                {% for h in history %}
+                <tr>
+                    <td>{{ h.t }}</td>
+                    <td>{{ h.s }}</td>
+                    <td class="{{ 'buy-txt' if h.type == 'BUY' else 'sell-txt' }}">{{ h.type }}</td>
+                    <td>₹{{ h.p }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
     <script>setInterval(function(){ location.reload(true); }, 120000);</script>
