@@ -1,23 +1,33 @@
-<div style="display: flex; gap: 20px; margin-bottom: 20px;">
-    <div class="card" style="flex: 1; text-align: center; border-top: 5px solid #4ade80;">
-        <h2 style="color: {{ '#4ade80' if total_pnl >= 0 else '#f87171' }}">₹{{ total_pnl }}</h2>
-        <p>एकूण नफा/तोटा (P&L)</p>
-    </div>
-    <div class="card" style="flex: 1; text-align: center; border-top: 5px solid #fbbf24;">
-        <h2 style="color: #fbbf24;">{{ win_rate }}%</h2>
-        <p>Success Rate</p>
-    </div>
+<div class="card">
+    <form action="/" method="get">
+        <label>स्टॉक चुनें (Ctrl दबाकर मल्टीपल चुनें):</label><br>
+        <select name="stocks" multiple style="width: 100%; height: 100px; margin: 10px 0;">
+            {% for stock in available_stocks %}
+            <option value="{{ stock }}">{{ stock }}</option>
+            {% endfor %}
+        </select>
+        <div style="display: flex; gap: 10px;">
+            <input type="date" name="start_date" required>
+            <input type="date" name="end_date" required>
+            <button type="submit" style="background: #4ade80; color: black; border: none; padding: 10px; cursor: pointer; border-radius: 5px;">बैकटेस्ट शुरू करें</button>
+        </div>
+    </form>
+</div>
+
+{% if bt_results %}
+<div class="card" style="text-align: center;">
+    <h2 style="color: {{ '#4ade80' if total_pnl >= 0 else '#f87171' }}">कुल शुद्ध लाभ: ₹{{ total_pnl }}</h2>
 </div>
 
 <table>
     <thead>
         <tr>
-            <th>वेळ</th>
+            <th>समय</th>
             <th>स्टॉक</th>
-            <th>Qty</th>
             <th>एंट्री</th>
-            <th>निकाल</th>
-            <th>नफा/तोटा</th>
+            <th>रिजल्ट</th>
+            <th>P&L (₹)</th>
+            <th>चार्ट</th>
         </tr>
     </thead>
     <tbody>
@@ -25,15 +35,12 @@
         <tr>
             <td>{{ r.t }}</td>
             <td>{{ r.s }}</td>
-            <td>{{ r.qty }}</td>
             <td>₹{{ r.p }}</td>
-            <td style="font-weight:bold; color: {{ '#4ade80' if 'Target' in r.res else '#f87171' if 'SL' in r.res else 'white' }}">
-                {{ r.res }}
-            </td>
-            <td style="font-weight:bold; color: {{ '#4ade80' if r.pnl > 0 else '#f87171' if r.pnl < 0 else 'white' }}">
-                {{ '₹' + r.pnl|string if r.pnl != 0 else '-' }}
-            </td>
+            <td style="color: {{ '#4ade80' if 'TGT' in r.res else '#f87171' if 'SL' in r.res else 'white' }}">{{ r.res }}</td>
+            <td>{{ r.pnl }}</td>
+            <td><a href="{{ r.tv_url }}" target="_blank" style="color: #60a5fa;">📊 View</a></td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
