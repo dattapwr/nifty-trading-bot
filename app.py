@@ -11,7 +11,9 @@ TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
 
-# ८० स्टॉक्सची यादी
+SIGNAL_HISTORY = []
+REPORT_SENT = False # रिपोर्ट एकदाच पाठवण्यासाठी
+
 SECTORS = {
     '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 'HEROMOTOCO.NS', 'ASHOKLEY.NS', 'TVSMOTOR.NS', 'BALKRISIND.NS', 'BHARATFORG.NS'],
     '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'INDUSINDBK.NS', 'BANKBARODA.NS', 'FEDERALBNK.NS', 'IDFCFIRSTB.NS', 'AUBANK.NS'],
@@ -45,44 +47,53 @@ def check_strategy(ticker, side):
     try:
         df = yf.download(ticker, period='1d', interval='5m', progress=False, threads=False)
         if len(df) < 3: return None
-        
         c0, c1, c2 = df.iloc[-1], df.iloc[-2], df.iloc[-3]
-        # Inside Candle Logic
         is_inside = (float(c1['High']) < float(c2['High'])) and (float(c1['Low']) > float(c2['Low']))
-        
-        curr_time = datetime.now(IST)
-        
+        tm = datetime.now(IST).strftime('%H:%M:%S')
         if side == "BUY" and is_inside and (float(c0['Close']) > float(c1['High'])):
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': curr_time.strftime('%H:%M:%S'), 'type': 'BUY'}
+            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'BUY'}
         if side == "SELL" and is_inside and (float(c0['Close']) < float(c1['Low'])):
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': curr_time.strftime('%H:%M:%S'), 'type': 'SELL'}
+            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'SELL'}
     except: return None
     return None
 
 @app.route('/')
 def home():
+    global REPORT_SENT
     now_ist = datetime.now(IST)
+    curr_time = now_ist.time()
     found_stocks, h2, l2 = [], [], []
-    market_open = time(9, 15) <= now_ist.time() <= time(15, 30)
+    
+    market_active = time(9, 15) <= curr_time <= time(15, 30)
 
-    if market_open:
+    # सकाळी हिस्टरी रिसेट करणे
+    if curr_time < time(9, 10):
+        SIGNAL_HISTORY.clear()
+        REPORT_SENT = False
+
+    if market_active:
         h2, l2 = get_top_sectors()
-        # BUY Scan
-        for s in h2:
-            for t in SECTORS[s['full_code']]:
-                res = check_strategy(t, "BUY")
-                if res:
-                    found_stocks.append(res)
-                    send_telegram(f"🚀 *BUY:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}\n⏰ Time: {res['t']}")
-        # SELL Scan
-        for s in l2:
-            for t in SECTORS[s['full_code']]:
-                res = check_strategy(t, "SELL")
-                if res:
-                    found_stocks.append(res)
-                    send_telegram(f"📉 *SELL:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}\n⏰ Time: {res['t']}")
+        # BUY/SELL स्कॅनिंग लॉजिक (Duplicate चेकसह)
+        for s_list, side in [(h2, "BUY"), (l2, "SELL")]:
+            for s in s_list:
+                for t in SECTORS[s['full_code']]:
+                    res = check_strategy(t, side)
+                    if res:
+                        found_stocks.append(res)
+                        if not any(x['s'] == t and x['type'] == side and x['t'][:5] == res['t'][:5] for x in SIGNAL_HISTORY):
+                            SIGNAL_HISTORY.append(res)
+                            icon = "🚀" if side == "BUY" else "📉"
+                            send_telegram(f"{icon} *{side}:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}\n⏰ Time: {res['t']}")
 
-    return render_template('index.html', stocks=found_stocks, h2=h2, l2=l2, market_open=market_open,
+    # ३:३० नंतर डेली रिपोर्ट पाठवणे
+    if curr_time > time(15, 30) and not REPORT_SENT and SIGNAL_HISTORY:
+        report_msg = "📋 *Today's Daily Report:*\n\n"
+        for h in SIGNAL_HISTORY:
+            report_msg += f"• {h['t'][:5]} | {h['s']} | {h['type']} @ {h['p']}\n"
+        send_telegram(report_msg)
+        REPORT_SENT = True
+
+    return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], h2=h2, l2=l2, market_open=market_active,
                            date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
