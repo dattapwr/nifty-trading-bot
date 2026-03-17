@@ -5,62 +5,46 @@
     <meta http-equiv="refresh" content="120">
     <title>Scanner Pro</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; margin: 0; padding: 15px; }
-        .container { max-width: 900px; margin: auto; }
-        .header-card { background: #1e293b; padding: 15px; border-radius: 12px; margin-bottom: 20px; border-bottom: 4px solid #38bdf8; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-bottom: 30px; }
-        .stock-card { background: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #38bdf8; }
-        .buy { border-color: #4ade80; }
-        .sell { border-color: #f87171; }
-        .tag { padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; margin: 2px; display: inline-block; }
-        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; font-size: 0.9em; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; }
-        th { background: #334155; color: #38bdf8; }
-        .buy-txt { color: #4ade80; font-weight: bold; }
-        .sell-txt { color: #f87171; font-weight: bold; }
+        body { font-family: sans-serif; background: #0f172a; color: white; padding: 10px; }
+        .card { background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #38bdf8; }
+        .bt-btn { background: #6366f1; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e293b; }
+        th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
+        .buy { color: #4ade80; } .sell { color: #f87171; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-card">
-            <h2 style="margin:0;">🚀 Live Inside-Bar Scanner</h2>
-            <p style="opacity:0.7;">{{ date }} | {{ time }}</p>
-            <div>
-                {% for s in h2 %} <span class="tag" style="background: #064e3b; color: #4ade80;">▲ {{ s.code }}</span> {% endfor %}
-                {% for s in l2 %} <span class="tag" style="background: #450a0a; color: #f87171;">▼ {{ s.code }}</span> {% endfor %}
-            </div>
-        </div>
-
-        <h3>📡 चालू सिग्नल</h3>
-        <div class="grid">
-            {% for s in stocks %}
-            <div class="stock-card {{ 'buy' if s.type == 'BUY' else 'sell' }}">
-                <b>{{ s.s }}</b><br>
-                <span style="font-size: 1.4em;">₹{{ s.p }}</span><br>
-                <span class="{{ 'buy-txt' if s.type == 'BUY' else 'sell-txt' }}">{{ s.type }} SIGNAL</span>
-            </div>
-            {% else %}
-            <p style="opacity: 0.5;">सध्या कोणतेही ब्रेकआउट नाहीत.</p>
-            {% endfor %}
-        </div>
-
-        <h3 style="margin-top: 40px;">📜 आजची हिस्टरी</h3>
-        <table>
-            <thead>
-                <tr><th>वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
-            </thead>
-            <tbody>
-                {% for h in history %}
-                <tr>
-                    <td>{{ h.t }}</td>
-                    <td>{{ h.s }}</td>
-                    <td class="{{ 'buy-txt' if h.type == 'BUY' else 'sell-txt' }}">{{ h.type }}</td>
-                    <td>₹{{ h.p }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="card">
+        <h2>🚀 Live Inside-Bar Scanner</h2>
+        <p>{{ date }} | {{ time }}</p>
+        <a href="/?bt=1" class="bt-btn">📊 ७ दिवसांचे बॅकटेस्ट पहा</a>
+        <a href="/" class="bt-btn" style="background:#334155;">🔄 लाईव्ह स्कॅनर</a>
     </div>
-    <script>setInterval(function(){ location.reload(true); }, 120000);</script>
+
+    {% if bt_results %}
+        <h3>📜 बॅकटेस्ट रिझल्ट (मागील ७ दिवस)</h3>
+        <table>
+            <tr><th>वेळ</th><th>स्टॉक</th><th>सिग्नल</th><th>किंमत</th></tr>
+            {% for r in bt_results %}
+            <tr>
+                <td>{{ r.t }}</td>
+                <td>{{ r.s }}</td>
+                <td class="{{ 'buy' if r.type == 'BUY' else 'sell' }}">{{ r.type }}</td>
+                <td>₹{{ r.p }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <h3>📡 आजचे चालू सिग्नल</h3>
+        {% for s in stocks %}
+            <div class="card" style="border-color: {{ '#4ade80' if s.type == 'BUY' else '#f87171' }};">
+                <b>{{ s.s }}</b> - ₹{{ s.p }} ({{ s.type }})
+            </div>
+        {% else %}
+            <p>सध्या कोणतेही सिग्नल नाहीत.</p>
+        {% endfor %}
+    {% endif %}
+
+    <script>setInterval(function(){ if(!window.location.search.includes('bt')) location.reload(); }, 120000);</script>
 </body>
 </html>
