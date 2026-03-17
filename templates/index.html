@@ -1,46 +1,53 @@
-<div class="card">
-    <form action="/" method="get">
-        <label>स्टॉक चुनें (Ctrl दबाकर मल्टीपल चुनें):</label><br>
-        <select name="stocks" multiple style="width: 100%; height: 100px; margin: 10px 0;">
-            {% for stock in available_stocks %}
-            <option value="{{ stock }}">{{ stock }}</option>
-            {% endfor %}
-        </select>
-        <div style="display: flex; gap: 10px;">
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Scanner</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; padding: 20px; }
+        .card { background: #1e293b; padding: 25px; border-radius: 15px; border-top: 5px solid #ef4444; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background: #334155; color: #f87171; text-transform: uppercase; font-size: 12px; }
+        .buy-zone { color: #4ade80; font-weight: bold; }
+        .sell-zone { color: #f87171; font-weight: bold; }
+        .sl-zone { color: #fbbf24; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🚀 Advanced Sell Scanner</h2>
+        <p>फिल्टर: ९:३० नंतर + कालच्या क्लोजिंगपेक्षा खाली + हिरवी कॅन्डल लो ब्रेकआऊट</p>
+        <form action="/" method="get">
             <input type="date" name="start_date" required>
             <input type="date" name="end_date" required>
-            <button type="submit" style="background: #4ade80; color: black; border: none; padding: 10px; cursor: pointer; border-radius: 5px;">बैकटेस्ट शुरू करें</button>
-        </div>
-    </form>
-</div>
+            <button type="submit" style="background:#ef4444; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer;">बॅकटेस्ट</button>
+        </form>
+    </div>
 
-{% if bt_results %}
-<div class="card" style="text-align: center;">
-    <h2 style="color: {{ '#4ade80' if total_pnl >= 0 else '#f87171' }}">कुल शुद्ध लाभ: ₹{{ total_pnl }}</h2>
-</div>
-
-<table>
-    <thead>
-        <tr>
-            <th>समय</th>
-            <th>स्टॉक</th>
-            <th>एंट्री</th>
-            <th>रिजल्ट</th>
-            <th>P&L (₹)</th>
-            <th>चार्ट</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in bt_results %}
-        <tr>
-            <td>{{ r.t }}</td>
-            <td>{{ r.s }}</td>
-            <td>₹{{ r.p }}</td>
-            <td style="color: {{ '#4ade80' if 'TGT' in r.res else '#f87171' if 'SL' in r.res else 'white' }}">{{ r.res }}</td>
-            <td>{{ r.pnl }}</td>
-            <td><a href="{{ r.tv_url }}" target="_blank" style="color: #60a5fa;">📊 View</a></td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endif %}
+    {% if bt_results %}
+    <table>
+        <thead>
+            <tr>
+                <th>वेळ</th>
+                <th>स्टॉक</th>
+                <th>एंट्री (SELL)</th>
+                <th>Stop Loss (High)</th>
+                <th>Target (1:2)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in bt_results %}
+            <tr>
+                <td>{{ r.t }}</td>
+                <td>{{ r.s }}</td>
+                <td class="sell-zone">₹{{ r.p }}</td>
+                <td class="sl-zone">₹{{ r.sl }}</td>
+                <td class="buy-zone">₹{{ r.tgt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</body>
+</html>
