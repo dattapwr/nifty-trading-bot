@@ -88,6 +88,8 @@ threading.Thread(target=check_strategy_loop, daemon=True).start()
 def home():
     now_ist = datetime.now(IST)
     return render_template('index.html', history=SIGNAL_HISTORY[::-1], market_open=True, date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
+# टेस्ट मेसेज पाठवण्यासाठी ही ओळ एकदाच वापरा
+send_telegram("🔔 *System Test:* दत्तात्रयजी, तुमची सिस्टिम आता पूर्णपणे कनेक्ट झाली आहे!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
