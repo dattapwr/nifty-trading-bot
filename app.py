@@ -37,12 +37,12 @@ def send_telegram(msg):
 
 def check_strategy(stock):
     try:
-        # intraday_data - interval ५ मिनिटे (Integer)
+        # intraday_data - interval १ मिनिटे (Integer)
         data = dhan.get_intraday_data(
             security_id=stock['sid'],
             exchange_segment='NSE_EQ',
             instrument_type='EQUITY',
-            interval=5, 
+            interval=1, 
             from_date=datetime.now(IST).strftime('%Y-%m-%d'),
             to_date=datetime.now(IST).strftime('%Y-%m-%d')
         )
