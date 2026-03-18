@@ -23,9 +23,7 @@ SIGNAL_HISTORY = []
 # लोड कमी करण्यासाठी फक्त ५ महत्त्वाचे स्टॉक्स (Heavyweight Stocks)
 WATCHLIST = [
     {'symbol': 'RELIANCE', 'sid': '2885'},
-    {'symbol': 'HDFCBANK', 'sid': '1333'},
-    {'symbol': 'ICICIBANK', 'sid': '4963'},
-    {'symbol': 'SBIN', 'sid': '3045'},
+   
     {'symbol': 'INFY', 'sid': '1594'}
 ]
 
