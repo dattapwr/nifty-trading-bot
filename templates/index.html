@@ -3,41 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Scanner - Live</title>
+    <title>Live Stock Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
+        body { background-color: #f4f7f6; }
         .buy-row { border-left: 6px solid #28a745; background-color: #f0fff4; }
         .sell-row { border-left: 6px solid #dc3545; background-color: #fff5f5; }
-        .card { border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
-        .tv-link { text-decoration: none; color: #2c3e50; font-weight: bold; }
-        .tv-link:hover { color: #007bff; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+        .navbar { background: linear-gradient(90deg, #2c3e50, #000); }
     </style>
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark shadow-sm">
-    <div class="container text-center text-white p-2">
-        <h4 class="mb-0">📈 Reversal Pattern Scanner</h4>
+<nav class="navbar navbar-dark shadow-sm">
+    <div class="container text-center text-white py-2">
+        <h4 class="mb-0">📊 Candlestick Color Reversal</h4>
         <small>{{ date }} | {{ time }} (दर १ मिनिटाला अपडेट)</small>
     </div>
 </nav>
 
 <div class="container mt-4">
     <div class="alert {{ 'alert-success' if market_open else 'alert-danger' }} text-center card py-2">
-        Market Status: <strong>{{ 'LIVE (चालू आहे)' if market_open else 'CLOSED (बंद आहे)' }}</strong>
+        Market Status: <strong>{{ 'LIVE' if market_open else 'CLOSED' }}</strong>
     </div>
 
     <div class="card p-3 mb-4">
-        <h5 class="mb-3 text-primary">🎯 Live Signals (सध्या आलेले)</h5>
+        <h5 class="mb-3 text-primary">🎯 Live Signals (सध्याचे)</h5>
         <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
+            <table class="table align-middle">
+                <thead>
                     <tr>
                         <th>Time</th>
                         <th>Stock Name</th>
-                        <th>Action</th>
-                        <th>Price</th>
+                        <th>Type</th>
+                        <th>LTP</th>
                         <th>Chart</th>
                     </tr>
                 </thead>
@@ -46,30 +45,24 @@
                     <tr class="{{ 'buy-row' if stock.type == 'BUY' else 'sell-row' }}">
                         <td>{{ stock.t }}</td>
                         <td><strong>{{ stock.s }}</strong></td>
-                        <td>
-                            <span class="badge {{ 'bg-success' if stock.type == 'BUY' else 'bg-danger' }}">
-                                {{ stock.type }}
-                            </span>
-                        </td>
+                        <td><span class="badge {{ 'bg-success' if stock.type == 'BUY' else 'bg-danger' }}">{{ stock.type }}</span></td>
                         <td>₹{{ stock.p }}</td>
                         <td>
-                            <a href="https://www.tradingview.com/chart/?symbol=NSE:{{ stock.s.split('.')[0] }}" target="_blank" class="btn btn-sm btn-outline-dark">
-                                View ↗
-                            </a>
+                            <a href="https://www.tradingview.com/chart/?symbol=NSE:{{ stock.s.split('.')[0] }}" target="_blank" class="btn btn-sm btn-dark">View ↗</a>
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="text-center text-muted py-3">सध्या कोणताही नवीन पॅटर्न मॅच होत नाहीये...</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted">पॅटर्न शोधत आहे... थोडा वेळ थांबा.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 
-    <div class="card p-3 mb-5">
-        <h5 class="mb-3">📜 Today's History</h5>
+    <div class="card p-3">
+        <h5 class="mb-3">📜 Signal History (Today)</h5>
         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-            <table class="table table-sm table-striped">
+            <table class="table table-sm table-hover">
                 <thead>
                     <tr>
                         <th>वेळ</th>
@@ -82,7 +75,7 @@
                     {% for h in history %}
                     <tr>
                         <td>{{ h.t }}</td>
-                        <td><a href="https://www.tradingview.com/chart/?symbol=NSE:{{ h.s.split('.')[0] }}" target="_blank" class="tv-link">{{ h.s }}</a></td>
+                        <td><a href="https://www.tradingview.com/chart/?symbol=NSE:{{ h.s.split('.')[0] }}" target="_blank" style="text-decoration: none;">{{ h.s }}</a></td>
                         <td class="{{ 'text-success' if h.type == 'BUY' else 'text-danger' }}"><strong>{{ h.type }}</strong></td>
                         <td>₹{{ h.p }}</td>
                     </tr>
@@ -94,10 +87,7 @@
 </div>
 
 <script>
-    // दर ६० सेकंदांनी (१ मिनिट) पेज रिफ्रेश होईल
-    setTimeout(function(){
-       location.reload();
-    }, 60000); 
+    setTimeout(function(){ location.reload(); }, 60000); // १ मिनिट रिफ्रेश
 </script>
 
 </body>
