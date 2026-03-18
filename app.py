@@ -7,7 +7,7 @@ from dhanhq import dhanhq
 
 app = Flask(__name__)
 
-# --- तुमचे धन डिटेल्स (दिलेल्या टोकननुसार) ---
+# --- तुमचे धन डिटेल्स ---
 CLIENT_ID = "1105760761"
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTAxNzcwLCJpYXQiOjE3NzM4MTUzNzAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.IxHMt3yaFEGdmNmD0OoJRQ4LI0_74gicUNJMxRgMQP7ca7qrEokD5KZ9ssWfZUtKMhOcfKWZ7_G7cZH_QdkacA"
 
@@ -20,7 +20,7 @@ IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# महत्त्वाच्या स्टॉक्सची यादी (Security IDs सह - अचूकतेसाठी)
+# अचूकतेसाठी Security ID (SID) वापरले आहेत
 WATCHLIST = [
     {'symbol': 'RELIANCE', 'sid': '2885'},
     {'symbol': 'TCS', 'sid': '11536'},
@@ -30,8 +30,8 @@ WATCHLIST = [
     {'symbol': 'INFY', 'sid': '1594'},
     {'symbol': 'TATAMOTORS', 'sid': '3456'},
     {'symbol': 'AXISBANK', 'sid': '5900'},
-    {'symbol': 'WIPRO', 'sid': '3787'},
-    {'symbol': 'BHARTIARTL', 'sid': '10604'}
+    {'symbol': 'BHARTIARTL', 'sid': '10604'},
+    {'symbol': 'WIPRO', 'sid': '3787'}
 ]
 
 def send_telegram(msg):
@@ -42,44 +42,50 @@ def send_telegram(msg):
 
 def check_strategy(stock):
     try:
-        # धन कडून ५ मिनिटांचा डेटा मिळवणे
+        # intraday data साठी interval=5 (Integer) असावा लागतो
         data = dhan.get_intraday_data(
             security_id=stock['sid'],
             exchange_segment='NSE_EQ',
             instrument_type='EQUITY',
-            interval='5', 
+            interval=5, 
             from_date=datetime.now(IST).strftime('%Y-%m-%d'),
             to_date=datetime.now(IST).strftime('%Y-%m-%d')
         )
 
-        if data.get('status') == 'success' and len(data['data']['open']) >= 3:
-            # [-2] = मागील पूर्ण झालेली कॅंडल, [-3] = त्याच्या आधीची कॅंडल
-            curr_o, curr_c = data['data']['open'][-2], data['data']['close'][-2]
-            prev_o, prev_c = data['data']['open'][-3], data['data']['close'][-3]
+        if data.get('status') == 'success' and 'data' in data:
+            d = data['data']
+            if len(d['open']) < 3: return None
+
+            # [-1] = चालू कॅन्डल (अजून संपलेली नाही)
+            # [-2] = नुकतीच संपलेली ५ मिनिटांची कॅन्डल (उदा. १२:१५ - १२:२० ची)
+            # [-3] = त्याच्या आधीची ५ मिनिटांची कॅन्डल (उदा. १२:१० - १२:१५ ची)
+            
+            curr_o, curr_c = float(d['open'][-2]), float(d['close'][-2])
+            prev_o, prev_c = float(d['open'][-3]), float(d['close'][-3])
             
             curr_green = curr_c > curr_o
             curr_red = curr_c < curr_o
             prev_green = prev_c > prev_o
             prev_red = prev_c < prev_o
             
-            candle_id = data['data']['start_Time'][-2]
+            candle_id = d['start_Time'][-2]
             display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-            # BUY: Red -> Green
+            # BUY: मागील लाल ([-3]) + नुकतीच संपलेली हिरवी ([-2])
             if prev_red and curr_green:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
 
-            # SELL: Green -> Red
+            # SELL: मागील हिरवी ([-3]) + नुकतीच संपलेली लाल ([-2])
             if prev_green and curr_red:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
-    except: pass
+    except Exception as e:
+        print(f"Error for {stock['symbol']}: {e}")
     return None
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    # मार्केट वेळ: ९:१५ ते ३:३०
     market_active = time(9, 15) <= curr_time <= time(15, 30)
     
     found_stocks = []
@@ -87,12 +93,14 @@ def home():
         for stock in WATCHLIST:
             res = check_strategy(stock)
             if res:
-                found_stocks.append(res)
-                # रिपिट सिग्नल टाळण्यासाठी चेक
-                if not any(x['s'] == stock['symbol'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
+                # रिपिट सिग्नल टाळण्यासाठी चेक (Symbol + Type + Candle Time)
+                if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                     SIGNAL_HISTORY.append(res)
                     icon = "🚀" if res['type'] == "BUY" else "📉"
                     send_telegram(f"{icon} *{res['type']} (Dhan):* `{res['s']}` @ ₹{res['p']}\n⏰ वेळ: {res['t']}")
+                
+                # फक्त चालू सिग्नल लिस्टमध्ये दाखवण्यासाठी
+                found_stocks.append(res)
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
                            market_open=market_active,
