@@ -2,3 +2,4 @@ flask
 dhanhq
 requests
 pytz
+gunicorn
