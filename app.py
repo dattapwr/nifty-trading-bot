@@ -20,19 +20,17 @@ IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# Watchlist: Crude Oil आणि Natural Gas (MCX)
+# --- १८ मार्च २०२६ साठी अपडेटेड MCX IDs ---
 WATCHLIST = [
-    {'symbol': 'CRUDEOIL', 'sid': '25'}, 
-    {'symbol': 'NATURALGAS', 'sid': '31'}
+    {'symbol': 'CRUDEOIL MAR FUT', 'sid': '64115'}, 
+    {'symbol': 'NATURALGAS MAR FUT', 'sid': '64132'}
 ]
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    try:
-        requests.get(url, params=params, timeout=5)
-    except:
-        pass
+    try: requests.get(url, params=params, timeout=5)
+    except: pass
 
 def check_strategy(stock):
     try:
@@ -49,35 +47,33 @@ def check_strategy(stock):
             d = data['data']
             if len(d['open']) < 3: return None
 
-            # [-3] = मागील कॅंडल, [-2] = नुकतीच क्लोज झालेली कॅंडल
-            prev_o, prev_c = float(d['open'][-3]), float(d['close'][-3])
-            curr_o, curr_c = float(d['open'][-2]), float(d['close'][-2])
+            # [-2] = मागील पूर्ण झालेली कॅंडल (Closed Candle)
+            prev_o = float(d['open'][-2])
+            prev_c = float(d['close'][-2])
             
-            candle_id = d['start_Time'][-2]
+            # [-1] = चालू कॅंडल (Current Candle Body)
+            curr_c = float(d['close'][-1])
+            
+            candle_id = d['start_Time'][-1]
             display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-            # --- ONLY BODY LOGIC (Wicks ignored) ---
+            # --- केवळ बॉडी रिव्हर्सल लॉजिक (Only Body) ---
             
-            # BUY: मागील कॅंडल Red होती (Close < Open) 
-            # आणि चालू कॅंडलचा Close मागील कॅंडलच्या Open (High Body) च्या वर आहे.
-            if prev_c < prev_o and curr_c > prev_o:
+            # BUY: मागील लाल बॉडी होती (Open > Close) आणि सध्याचा भाव तिच्या Open च्या वर गेला.
+            if prev_o > prev_c and curr_c > prev_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
 
-            # SELL: मागील कॅंडल Green होती (Close > Open) 
-            # आणि चालू कॅंडलचा Close मागील कॅंडलच्या Open (Low Body) च्या खाली आहे.
+            # SELL: मागील हिरवी बॉडी होती (Close > Open) आणि सध्याचा भाव तिच्या Open च्या खाली गेला.
             if prev_c > prev_o and curr_c < prev_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
                 
-    except Exception as e:
-        print(f"Error checking {stock['symbol']}: {e}")
+    except: pass
     return None
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    
-    # मार्केट वेळ (MCX साठी सकाळी ९ ते रात्री ११:३०)
     market_active = time(9, 0) <= curr_time <= time(23, 30)
     
     found_stocks = []
@@ -85,12 +81,10 @@ def home():
         for stock in WATCHLIST:
             res = check_strategy(stock)
             if res:
-                # एकाच कॅंडलवर वारंवार सिग्नल येऊ नये म्हणून चेक
                 if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                     SIGNAL_HISTORY.append(res)
-                    icon = "🛢️" if "CRUDE" in res['s'] else "🔥"
                     trend = "🚀 BUY" if res['type'] == "BUY" else "📉 SELL"
-                    send_telegram(f"{icon} *{trend} SIGNAL*\n\nStock: `{res['s']}`\nPrice: {res['p']}\nTime: {res['t']}\n(Body Breakout)")
+                    send_telegram(f"*{trend} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
                     found_stocks.append(res)
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
