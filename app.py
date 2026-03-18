@@ -20,13 +20,10 @@ IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# जास्तीत जास्त सिग्नल मिळण्यासाठी टॉप ५ ॲक्टिव्ह स्टॉक्स
+# Watchlist: Crude Oil आणि Natural Gas (MCX)
 WATCHLIST = [
-    {'symbol': 'RELIANCE', 'sid': '2885'},
-    {'symbol': 'HDFCBANK', 'sid': '1333'},
-    {'symbol': 'SBIN', 'sid': '3045'},
-    {'symbol': 'ICICIBANK', 'sid': '4963'},
-    {'symbol': 'INFY', 'sid': '1594'}
+    {'symbol': 'CRUDEOIL', 'sid': '25'}, 
+    {'symbol': 'NATURALGAS', 'sid': '31'}
 ]
 
 def send_telegram(msg):
@@ -34,16 +31,15 @@ def send_telegram(msg):
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try:
         requests.get(url, params=params, timeout=5)
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+    except:
+        pass
 
 def check_strategy(stock):
     try:
-        # १ मिनिटाचा डेटा मिळवणे
         data = dhan.get_intraday_data(
             security_id=stock['sid'],
-            exchange_segment='NSE_EQ',
-            instrument_type='EQUITY',
+            exchange_segment='MCX_FO',
+            instrument_type='FUTCOM',
             interval=1, 
             from_date=datetime.now(IST).strftime('%Y-%m-%d'),
             to_date=datetime.now(IST).strftime('%Y-%m-%d')
@@ -51,25 +47,25 @@ def check_strategy(stock):
 
         if data.get('status') == 'success' and 'data' in data:
             d = data['data']
-            if len(d['open']) < 5: return None
+            if len(d['open']) < 3: return None
 
-            # मागील पूर्ण झालेली कॅंडल (Index -3)
-            prev_o, prev_h, prev_l, prev_c = float(d['open'][-3]), float(d['high'][-3]), float(d['low'][-3]), float(d['close'][-3])
-            
-            # नुकतीच संपलेली ताजी कॅंडल (Index -2)
-            curr_o, curr_h, curr_l, curr_c = float(d['open'][-2]), float(d['high'][-2]), float(d['low'][-2]), float(d['close'][-2])
+            # [-3] = मागील कॅंडल, [-2] = नुकतीच क्लोज झालेली कॅंडल
+            prev_o, prev_c = float(d['open'][-3]), float(d['close'][-3])
+            curr_o, curr_c = float(d['open'][-2]), float(d['close'][-2])
             
             candle_id = d['start_Time'][-2]
             display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-            # --- BREAKOUT STRATEGY ---
+            # --- ONLY BODY LOGIC (Wicks ignored) ---
             
-            # BUY: मागील कॅंडल Red होती आणि चालू कॅंडलने तिच्या HIGH च्या वर क्लोज दिले.
-            if prev_c < prev_o and curr_c > prev_h:
+            # BUY: मागील कॅंडल Red होती (Close < Open) 
+            # आणि चालू कॅंडलचा Close मागील कॅंडलच्या Open (High Body) च्या वर आहे.
+            if prev_c < prev_o and curr_c > prev_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
 
-            # SELL: मागील कॅंडल Green होती आणि चालू कॅंडलने तिच्या LOW च्या खाली क्लोज दिले.
-            if prev_c > prev_o and curr_c < prev_l:
+            # SELL: मागील कॅंडल Green होती (Close > Open) 
+            # आणि चालू कॅंडलचा Close मागील कॅंडलच्या Open (Low Body) च्या खाली आहे.
+            if prev_c > prev_o and curr_c < prev_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
                 
     except Exception as e:
@@ -80,19 +76,21 @@ def check_strategy(stock):
 def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    # मार्केट वेळ: ९:१५ ते ३:३०
-    market_active = time(9, 15) <= curr_time <= time(15, 30)
+    
+    # मार्केट वेळ (MCX साठी सकाळी ९ ते रात्री ११:३०)
+    market_active = time(9, 0) <= curr_time <= time(23, 30)
     
     found_stocks = []
     if market_active:
         for stock in WATCHLIST:
             res = check_strategy(stock)
             if res:
-                # रिपिट सिग्नल टाळण्यासाठी चेक
+                # एकाच कॅंडलवर वारंवार सिग्नल येऊ नये म्हणून चेक
                 if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                     SIGNAL_HISTORY.append(res)
-                    icon = "🚀" if res['type'] == "BUY" else "📉"
-                    send_telegram(f"{icon} *{res['type']} ALERT* \n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
+                    icon = "🛢️" if "CRUDE" in res['s'] else "🔥"
+                    trend = "🚀 BUY" if res['type'] == "BUY" else "📉 SELL"
+                    send_telegram(f"{icon} *{trend} SIGNAL*\n\nStock: `{res['s']}`\nPrice: {res['p']}\nTime: {res['t']}\n(Body Breakout)")
                     found_stocks.append(res)
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
