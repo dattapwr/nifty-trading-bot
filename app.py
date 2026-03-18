@@ -1,10 +1,11 @@
 import os
 import pytz
 import requests
+import threading
+import time as pytime
 from datetime import datetime
 from flask import Flask, render_template
 from dhanhq import dhanhq
-from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -34,62 +35,63 @@ def send_telegram(msg):
     except: pass
 
 def check_strategy():
-    now_ist = datetime.now(IST)
-    for stock in WATCHLIST:
-        try:
-            data = dhan.get_intraday_data(
-                security_id=stock['sid'],
-                exchange_segment='MCX_FO',
-                instrument_type='FUTCOM',
-                interval=1, 
-                from_date=now_ist.strftime('%Y-%m-%d'),
-                to_date=now_ist.strftime('%Y-%m-%d')
-            )
+    while True: # सतत चालण्यासाठी लूप
+        now_ist = datetime.now(IST)
+        print(f"--- Checking Market at {now_ist.strftime('%H:%M:%S')} ---")
+        
+        for stock in WATCHLIST:
+            try:
+                data = dhan.get_intraday_data(
+                    security_id=stock['sid'],
+                    exchange_segment='MCX_FO',
+                    instrument_type='FUTCOM',
+                    interval=1, 
+                    from_date=now_ist.strftime('%Y-%m-%d'),
+                    to_date=now_ist.strftime('%Y-%m-%d')
+                )
 
-            if data.get('status') == 'success' and 'data' in data:
-                d = data['data']
-                if len(d['open']) < 3: continue
+                if data.get('status') == 'success' and 'data' in data:
+                    d = data['data']
+                    if len(d['open']) >= 2:
+                        # [-2] मागील पूर्ण कॅंडल | [-1] चालू भाव (LTP)
+                        prev_o, prev_c = float(d['open'][-2]), float(d['close'][-2])
+                        curr_c = float(d['close'][-1])
+                        candle_id = d['start_Time'][-1]
+                        
+                        # --- तुमच्या चित्राप्रमाणे बॉडी लॉजिक ---
+                        res = None
+                        # BUY: मागील रेड कॅंडलच्या Open च्या वर सध्याची किंमत गेली तर
+                        if prev_o > prev_c and curr_c > prev_o:
+                            res = {'s': stock['symbol'], 'p': round(curr_c, 2), 't': now_ist.strftime('%H:%M:%S'), 'id_t': candle_id, 'type': 'BUY'}
+                        
+                        # SELL: मागील ग्रीन कॅंडलच्या Open च्या खाली सध्याची किंमत गेली तर
+                        elif prev_c > prev_o and curr_c < prev_o:
+                            res = {'s': stock['symbol'], 'p': round(curr_c, 2), 't': now_ist.strftime('%H:%M:%S'), 'id_t': candle_id, 'type': 'SELL'}
 
-                # [-2] मागील पूर्ण कॅंडल | [-1] चालू किंमत (LTP)
-                prev_o, prev_c = float(d['open'][-2]), float(d['close'][-2])
-                curr_c = float(d['close'][-1])
-                
-                candle_id = d['start_Time'][-1]
-                display_time = now_ist.strftime('%H:%M:%S')
+                        if res:
+                            # डुप्लिकेट टाळण्यासाठी चेक
+                            if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
+                                SIGNAL_HISTORY.append(res)
+                                icon = "🚀" if res['type'] == "BUY" else "📉"
+                                send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
+                                print(f"SENT TO TELEGRAM: {res['s']} {res['type']}")
 
-                # --- तुमच्या चित्राप्रमाणे केवळ बॉडी लॉजिक ---
-                res = None
-                # BUY: मागील लाल (Open > Close) आणि चालू किंमत तिच्या Open च्या वर
-                if prev_o > prev_c and curr_c > prev_o:
-                    res = {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
-                
-                # SELL: मागील हिरवी (Close > Open) आणि चालू किंमत तिच्या Open च्या खाली
-                elif prev_c > prev_o and curr_c < prev_o:
-                    res = {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
+            except Exception as e:
+                print(f"Error checking {stock['symbol']}: {e}")
+        
+        pytime.sleep(60) # १ मिनिट थांबा आणि पुन्हा चेक करा
 
-                if res:
-                    if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
-                        SIGNAL_HISTORY.append(res)
-                        icon = "🚀" if res['type'] == "BUY" else "📉"
-                        send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
-                        print(f"SIGNAL SENT: {res['s']} {res['type']}")
-
-        except Exception as e:
-            print(f"Check Strategy Error: {e}")
-
-# --- बॅकग्राउंड शेड्युलर ---
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(func=check_strategy, trigger="interval", seconds=60)
-scheduler.start()
+# --- बॅकग्राउंड थ्रेड सुरू करा ---
+threading.Thread(target=check_strategy, daemon=True).start()
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
     return render_template('index.html', history=SIGNAL_HISTORY[::-1], 
-                           market_open=True, # डॅशबोर्डवर नेहमी OPEN दिसेल
+                           market_open=True, 
                            date=now_ist.strftime('%d-%m-%Y'), 
                            time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, use_reloader=False)
+    app.run(host='0.0.0.0', port=port)
