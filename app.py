@@ -20,29 +20,24 @@ IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# अचूकतेसाठी Security ID (SID) वापरले आहेत
+# लोड कमी करण्यासाठी फक्त ५ महत्त्वाचे स्टॉक्स (Heavyweight Stocks)
 WATCHLIST = [
     {'symbol': 'RELIANCE', 'sid': '2885'},
-    {'symbol': 'TCS', 'sid': '11536'},
     {'symbol': 'HDFCBANK', 'sid': '1333'},
     {'symbol': 'ICICIBANK', 'sid': '4963'},
     {'symbol': 'SBIN', 'sid': '3045'},
-    {'symbol': 'INFY', 'sid': '1594'},
-    {'symbol': 'TATAMOTORS', 'sid': '3456'},
-    {'symbol': 'AXISBANK', 'sid': '5900'},
-    {'symbol': 'BHARTIARTL', 'sid': '10604'},
-    {'symbol': 'WIPRO', 'sid': '3787'}
+    {'symbol': 'INFY', 'sid': '1594'}
 ]
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    try: requests.get(url, params=params, timeout=5)
+    try: requests.get(url, params=params, timeout=2) # Timeout कमी केला आहे
     except: pass
 
 def check_strategy(stock):
     try:
-        # intraday data साठी interval=5 (Integer) असावा लागतो
+        # intraday_data - interval ५ मिनिटे (Integer)
         data = dhan.get_intraday_data(
             security_id=stock['sid'],
             exchange_segment='NSE_EQ',
@@ -56,30 +51,21 @@ def check_strategy(stock):
             d = data['data']
             if len(d['open']) < 3: return None
 
-            # [-1] = चालू कॅन्डल (अजून संपलेली नाही)
-            # [-2] = नुकतीच संपलेली ५ मिनिटांची कॅन्डल (उदा. १२:१५ - १२:२० ची)
-            # [-3] = त्याच्या आधीची ५ मिनिटांची कॅन्डल (उदा. १२:१० - १२:१५ ची)
-            
+            # [-2] = मागील पूर्ण झालेली कॅंडल, [-3] = त्याच्या आधीची
             curr_o, curr_c = float(d['open'][-2]), float(d['close'][-2])
             prev_o, prev_c = float(d['open'][-3]), float(d['close'][-3])
-            
-            curr_green = curr_c > curr_o
-            curr_red = curr_c < curr_o
-            prev_green = prev_c > prev_o
-            prev_red = prev_c < prev_o
             
             candle_id = d['start_Time'][-2]
             display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-            # BUY: मागील लाल ([-3]) + नुकतीच संपलेली हिरवी ([-2])
-            if prev_red and curr_green:
+            # BUY: मागील Red (prev_c < prev_o) + चालू Green (curr_c > curr_o)
+            if prev_c < prev_o and curr_c > curr_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
 
-            # SELL: मागील हिरवी ([-3]) + नुकतीच संपलेली लाल ([-2])
-            if prev_green and curr_red:
+            # SELL: मागील Green (prev_c > prev_o) + चालू Red (curr_c < curr_o)
+            if prev_c > prev_o and curr_c < curr_o:
                 return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
-    except Exception as e:
-        print(f"Error for {stock['symbol']}: {e}")
+    except: pass
     return None
 
 @app.route('/')
@@ -93,18 +79,18 @@ def home():
         for stock in WATCHLIST:
             res = check_strategy(stock)
             if res:
-                # रिपिट सिग्नल टाळण्यासाठी चेक (Symbol + Type + Candle Time)
+                found_stocks.append(res)
+                # रिपिट रोखण्यासाठी: स्टॉक नाव + प्रकार + कॅंडलची वेळ तिन्ही तपासले जातात
                 if not any(x['s'] == res['s'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                     SIGNAL_HISTORY.append(res)
                     icon = "🚀" if res['type'] == "BUY" else "📉"
                     send_telegram(f"{icon} *{res['type']} (Dhan):* `{res['s']}` @ ₹{res['p']}\n⏰ वेळ: {res['t']}")
-                
-                # फक्त चालू सिग्नल लिस्टमध्ये दाखवण्यासाठी
-                found_stocks.append(res)
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
                            market_open=market_active,
                            date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    # Render साठी पोर्ट सेटिंग
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
