@@ -31,15 +31,16 @@ def send_telegram(msg):
     try: requests.get(url, params=params, timeout=5)
     except: pass
 
-def check_strategy():
+def check_strategy_loop():
     while True:
-        now_ist = datetime.now(IST)
-        today = now_ist.strftime('%Y-%m-%d')
-        print(f"--- Scanning Market: {now_ist.strftime('%H:%M:%S')} ---")
-        
-        for stock in WATCHLIST:
-            try:
-                # एरर फिक्स: from_date आणि to_date परत जोडले आहेत
+        try:
+            now_ist = datetime.now(IST)
+            today = now_ist.strftime('%Y-%m-%d')
+            # हे लॉगमध्ये दिसेल, म्हणजे आपल्याला कळेल बॉट काम करतोय
+            print(f">>> Scanning Market at {now_ist.strftime('%H:%M:%S')}")
+            
+            for stock in WATCHLIST:
+                # सुधारित फंक्शन (from_date आणि to_date सह)
                 data = dhan.intraday_minute_data(
                     security_id=stock['sid'],
                     exchange_segment='MCX_FO',
@@ -56,10 +57,9 @@ def check_strategy():
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # BUY: मागील Red बॉडी, सध्याचा भाव तिच्या Open च्या वर
+                        # तुमच्या चित्राप्रमाणे बॉडी लॉजिक
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
-                        # SELL: मागील Green बॉडी, सध्याचा भाव तिच्या Open च्या खाली
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
@@ -70,15 +70,15 @@ def check_strategy():
                                 SIGNAL_HISTORY.append(res)
                                 icon = "🚀" if res['type'] == "BUY" else "📉"
                                 send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
-                                print(f"SENT: {res['s']} {res['type']}")
+                                print(f"!!! SIGNAL SENT: {res['s']} {res['type']}")
 
-            except Exception as e:
-                print(f"Error in {stock['symbol']}: {e}")
+        except Exception as e:
+            print(f"Loop Error: {e}")
         
-        pytime.sleep(60)
+        pytime.sleep(60) # दर १ मिनिटाला चेक करेल
 
-# बॅकग्राउंडमध्ये थ्रेड सुरू करणे
-threading.Thread(target=check_strategy, daemon=True).start()
+# बॅकग्राउंडमध्ये थ्रेड सुरू करा
+threading.Thread(target=check_strategy_loop, daemon=True).start()
 
 @app.route('/')
 def home():
