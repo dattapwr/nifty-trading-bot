@@ -1,11 +1,17 @@
-import yfinance as yf
-import requests
 import os
 import pytz
+import requests
 from datetime import datetime, time
 from flask import Flask, render_template
+from dhanhq import dhanhq
 
 app = Flask(__name__)
+
+# --- तुमचे धन डिटेल्स (दिलेल्या टोकननुसार) ---
+CLIENT_ID = "1105760761"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTAxNzcwLCJpYXQiOjE3NzM4MTUzNzAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.IxHMt3yaFEGdmNmD0OoJRQ4LI0_74gicUNJMxRgMQP7ca7qrEokD5KZ9ssWfZUtKMhOcfKWZ7_G7cZH_QdkacA"
+
+dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
 # Telegram Details
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
@@ -14,10 +20,18 @@ IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# लोड कमी करण्यासाठी फक्त १० महत्त्वाचे स्टॉक्स
+# महत्त्वाच्या स्टॉक्सची यादी (Security IDs सह - अचूकतेसाठी)
 WATCHLIST = [
-    'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
-    'TATAMOTORS.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'LT.NS', 'M&M.NS'
+    {'symbol': 'RELIANCE', 'sid': '2885'},
+    {'symbol': 'TCS', 'sid': '11536'},
+    {'symbol': 'HDFCBANK', 'sid': '1333'},
+    {'symbol': 'ICICIBANK', 'sid': '4963'},
+    {'symbol': 'SBIN', 'sid': '3045'},
+    {'symbol': 'INFY', 'sid': '1594'},
+    {'symbol': 'TATAMOTORS', 'sid': '3456'},
+    {'symbol': 'AXISBANK', 'sid': '5900'},
+    {'symbol': 'WIPRO', 'sid': '3787'},
+    {'symbol': 'BHARTIARTL', 'sid': '10604'}
 ]
 
 def send_telegram(msg):
@@ -26,52 +40,59 @@ def send_telegram(msg):
     try: requests.get(url, params=params, timeout=5)
     except: pass
 
-def check_strategy(ticker):
+def check_strategy(stock):
     try:
-        # ५ मिनिटांचा डेटा, वेगासाठी threads=False ठेवले आहे कारण स्टॉक कमी आहेत
-        df = yf.download(ticker, period='1d', interval='5m', progress=False)
-        if len(df) < 2: return None
-        
-        curr = df.iloc[-1]
-        prev = df.iloc[-2]
-        
-        curr_green = float(curr['Close']) > float(curr['Open'])
-        curr_red = float(curr['Close']) < float(curr['Open'])
-        prev_green = float(prev['Close']) > float(prev['Open'])
-        prev_red = float(prev['Close']) < float(prev['Open'])
-        
-        # युनिक आयडीसाठी कॅन्डलची वेळ
-        candle_id = df.index[-1].astimezone(IST).strftime('%H:%M')
-        display_time = datetime.now(IST).strftime('%H:%M:%S')
+        # धन कडून ५ मिनिटांचा डेटा मिळवणे
+        data = dhan.get_intraday_data(
+            security_id=stock['sid'],
+            exchange_segment='NSE_EQ',
+            instrument_type='EQUITY',
+            interval='5', 
+            from_date=datetime.now(IST).strftime('%Y-%m-%d'),
+            to_date=datetime.now(IST).strftime('%Y-%m-%d')
+        )
 
-        # BUY अट: १ली लाल + २री हिरवी क्लोज 
-        if prev_red and curr_green:
-            return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
+        if data.get('status') == 'success' and len(data['data']['open']) >= 3:
+            # [-2] = मागील पूर्ण झालेली कॅंडल, [-3] = त्याच्या आधीची कॅंडल
+            curr_o, curr_c = data['data']['open'][-2], data['data']['close'][-2]
+            prev_o, prev_c = data['data']['open'][-3], data['data']['close'][-3]
+            
+            curr_green = curr_c > curr_o
+            curr_red = curr_c < curr_o
+            prev_green = prev_c > prev_o
+            prev_red = prev_c < prev_o
+            
+            candle_id = data['data']['start_Time'][-2]
+            display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-        # SELL अट: १ली हिरवी + २री लाल क्लोज 
-        if prev_green and curr_red:
-            return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
-    except: return None
+            # BUY: Red -> Green
+            if prev_red and curr_green:
+                return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
+
+            # SELL: Green -> Red
+            if prev_green and curr_red:
+                return {'s': stock['symbol'], 'p': round(curr_c, 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
+    except: pass
     return None
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    # सकाळी ९:१५ ते ३:३० मार्केट चालू असतानाच स्कॅनिंग होईल
+    # मार्केट वेळ: ९:१५ ते ३:३०
     market_active = time(9, 15) <= curr_time <= time(15, 30)
     
     found_stocks = []
     if market_active:
-        for t in WATCHLIST:
-            res = check_strategy(t)
+        for stock in WATCHLIST:
+            res = check_strategy(stock)
             if res:
                 found_stocks.append(res)
-                # रिपीट सिग्नल रोखण्यासाठी अट
-                if not any(x['s'] == t and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
+                # रिपिट सिग्नल टाळण्यासाठी चेक
+                if not any(x['s'] == stock['symbol'] and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                     SIGNAL_HISTORY.append(res)
                     icon = "🚀" if res['type'] == "BUY" else "📉"
-                    send_telegram(f"{icon} *{res['type']}:* `{t}` @ ₹{res['p']}\n⏰ वेळ: {res['t']}")
+                    send_telegram(f"{icon} *{res['type']} (Dhan):* `{res['s']}` @ ₹{res['p']}\n⏰ वेळ: {res['t']}")
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
                            market_open=market_active,
