@@ -13,7 +13,6 @@ app = Flask(__name__)
 CLIENT_ID = "1105760761"
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTAxNzcwLCJpYXQiOjE3NzM4MTUzNzAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.IxHMt3yaFEGdmNmD0OoJRQ4LI0_74gicUNJMxRgMQP7ca7qrEokD5KZ9ssWfZUtKMhOcfKWZ7_G7cZH_QdkacA"
 
-# लायब्ररी सुधारणा: धन ऑब्जेक्ट तयार करण्याची पद्धत
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
@@ -35,35 +34,36 @@ def send_telegram(msg):
 def check_strategy():
     while True:
         now_ist = datetime.now(IST)
+        today = now_ist.strftime('%Y-%m-%d')
         print(f"--- Scanning Market: {now_ist.strftime('%H:%M:%S')} ---")
         
         for stock in WATCHLIST:
             try:
-                # सुधारित फंक्शन नाव: intraday_minute_data
+                # एरर फिक्स: from_date आणि to_date परत जोडले आहेत
                 data = dhan.intraday_minute_data(
                     security_id=stock['sid'],
                     exchange_segment='MCX_FO',
-                    instrument_type='FUTCOM'
+                    instrument_type='FUTCOM',
+                    from_date=today,
+                    to_date=today
                 )
 
                 if data.get('status') == 'success' and 'data' in data:
                     d = data['data']
-                    if len(d['open']) >= 2:
-                        # मागील कॅंडल आणि सध्याचा भाव
+                    if 'open' in d and len(d['open']) >= 2:
                         prev_o, prev_c = float(d['open'][-2]), float(d['close'][-2])
                         curr_c = float(d['close'][-1])
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # BUY: मागील Red, सध्याचा भाव तिच्या Open च्या वर
+                        # BUY: मागील Red बॉडी, सध्याचा भाव तिच्या Open च्या वर
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
-                        # SELL: मागील Green, सध्याचा भाव तिच्या Open च्या खाली
+                        # SELL: मागील Green बॉडी, सध्याचा भाव तिच्या Open च्या खाली
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
                         if res:
-                            # डुप्लिकेट सिग्नल टाळण्यासाठी
                             if not any(x['s'] == res['s'] and x['type'] == res['type'] and x.get('id_t') == candle_id for x in SIGNAL_HISTORY):
                                 res['t'] = now_ist.strftime('%H:%M:%S')
                                 res['id_t'] = candle_id
@@ -77,12 +77,16 @@ def check_strategy():
         
         pytime.sleep(60)
 
-# बॅकग्राउंडमध्ये काम सुरू करा
+# बॅकग्राउंडमध्ये थ्रेड सुरू करणे
 threading.Thread(target=check_strategy, daemon=True).start()
 
 @app.route('/')
 def home():
-    return render_template('index.html', history=SIGNAL_HISTORY[::-1], market_open=True)
+    now_ist = datetime.now(IST)
+    return render_template('index.html', history=SIGNAL_HISTORY[::-1], 
+                           market_open=True, 
+                           date=now_ist.strftime('%d-%m-%Y'), 
+                           time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
