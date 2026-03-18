@@ -3,3 +3,6 @@ dhanhq
 pytz
 requests
 apscheduler
+gunicorn
+pandas
+numpy
