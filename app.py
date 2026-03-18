@@ -2,19 +2,18 @@ import yfinance as yf
 import requests
 import os
 import pytz
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
 
-# Telegram Details
+# Telegram Settings
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
 
-# सर्व ८ सेक्टर्सचे स्टॉक्स
 SECTORS = {
     '^CNXAUTO': ['TATAMOTORS.NS', 'M&M.NS', 'MARUTI.NS', 'BAJAJ-AUTO.NS', 'EICHERMOT.NS', 'HEROMOTOCO.NS', 'ASHOKLEY.NS', 'TVSMOTOR.NS', 'BALKRISIND.NS', 'BHARATFORG.NS'],
     '^CNXBANK': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 'INDUSINDBK.NS', 'BANKBARODA.NS', 'FEDERALBNK.NS', 'IDFCFIRSTB.NS', 'AUBANK.NS'],
@@ -34,28 +33,31 @@ def send_telegram(msg):
 
 def check_strategy(ticker):
     try:
-        # ५ मिनिटांच्या इंटरव्हलवर डेटा मिळवणे
+        # ५ मिनिटांच्या कॅन्डलवर डेटा मिळवणे
         df = yf.download(ticker, period='1d', interval='5m', progress=False, threads=True)
-        if len(df) < 2: return None
+        if len(df) < 3: return None
         
-        # c0 = सध्याची क्लोज झालेली कॅन्डल, c1 = मागील कॅन्डल
-        c0, c1 = df.iloc[-1], df.iloc[-2]
-        
-        c0_green = float(c0['Close']) > float(c0['Open'])
-        c0_red = float(c0['Close']) < float(c0['Open'])
-        c1_green = float(c1['Close']) > float(c1['Open'])
-        c1_red = float(c1['Close']) < float(c1['Open'])
+        # Yahoo Finance चा डेटा उशिरा येतो, म्हणून आपण शेवटच्या २ कॅण्डल्स तपासतो
+        for i in range(-1, -3, -1):
+            curr = df.iloc[i]
+            prev = df.iloc[i-1]
+            
+            curr_green = float(curr['Close']) > float(curr['Open'])
+            curr_red = float(curr['Close']) < float(curr['Open'])
+            prev_green = float(prev['Close']) > float(prev['Open'])
+            prev_red = float(prev['Close']) < float(prev['Open'])
+            
+            # कॅन्डलची वेळ (ID साठी)
+            candle_time = df.index[i].astimezone(IST).strftime('%H:%M')
+            display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-        tm = datetime.now(IST).strftime('%H:%M:%S')
+            # BUY: मागील लाल (c1) + आताची हिरवी (c0)
+            if prev_red and curr_green:
+                return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_time, 'type': 'BUY'}
 
-        # BUY अट: १ली लाल (c1) आणि त्यानंतर लगेच २री हिरवी (c0) क्लोज झाली
-        if c1_red and c0_green:
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'BUY'}
-
-        # SELL अट: १ली हिरवी (c1) आणि त्यानंतर लगेच २री लाल (c0) क्लोज झाली
-        if c1_green and c0_red:
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'SELL'}
-                
+            # SELL: मागील हिरवी (c1) + आताची लाल (c0)
+            if prev_green and curr_red:
+                return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_time, 'type': 'SELL'}
     except: return None
     return None
 
@@ -63,22 +65,20 @@ def check_strategy(ticker):
 def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
-    # सकाळी ९:१५ ते ३:३० दरम्यान स्कॅनिंग चालू राहील
     market_active = time(9, 15) <= curr_time <= time(15, 30)
     
     found_stocks = []
-
     if market_active:
         for sector, tickers in SECTORS.items():
             for t in tickers:
                 res = check_strategy(t)
                 if res:
                     found_stocks.append(res)
-                    # जर हा सिग्नल आजच्या इतिहासात नसेल तरच मेसेज पाठवा
-                    if not any(x['s'] == t and x['type'] == res['type'] and x['t'][:5] == res['t'][:5] for x in SIGNAL_HISTORY):
+                    # जर हा सिग्नल त्याच वेळेसाठी इतिहासात नसेल तरच पाठवा
+                    if not any(x['s'] == t and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                         SIGNAL_HISTORY.append(res)
                         icon = "🚀" if res['type'] == "BUY" else "📉"
-                        send_telegram(f"{icon} *{res['type']}:* `{t}` @ ₹{res['p']}\n📊 Sector: {sector}")
+                        send_telegram(f"{icon} *{res['type']}:* `{t}` @ ₹{res['p']}\n⏰ Time: {res['t']}")
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
                            market_open=market_active,
