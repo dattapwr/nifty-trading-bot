@@ -28,7 +28,7 @@ WATCHLIST = [
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    try: requests.get(url, params=params, timeout=5)
+    try: requests.get(url, params=params, timeout=15)
     except: pass
 
 def check_strategy_loop():
