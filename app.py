@@ -47,32 +47,56 @@ def check_strategy(ticker, side):
     try:
         df = yf.download(ticker, period='1d', interval='5m', progress=False, threads=False)
         if len(df) < 3: return None
+        
+        # c0 = सध्याची कॅन्डल, c1 = मागील कॅन्डल, c2 = त्याच्या मागील कॅन्डल
         c0, c1, c2 = df.iloc[-1], df.iloc[-2], df.iloc[-3]
-        is_inside = (float(c1['High']) < float(c2['High'])) and (float(c1['Low']) > float(c2['Low']))
+        
+        # कॅन्डलचे रंग ठरवणे (Close > Open म्हणजे हिरवी, Close < Open म्हणजे लाल)
+        c2_is_red = float(c2['Close']) < float(c2['Open'])
+        c2_is_green = float(c2['Close']) > float(c2['Open'])
+        
+        c1_is_green = float(c1['Close']) > float(c1['Open'])
+        c1_is_red = float(c1['Close']) < float(c1['Open'])
+
         tm = datetime.now(IST).strftime('%H:%M:%S')
-        if side == "BUY" and is_inside and (float(c0['Close']) > float(c1['High'])):
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'BUY'}
-        if side == "SELL" and is_inside and (float(c0['Close']) < float(c1['Low'])):
-            return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'SELL'}
+
+        # BUY अट: १ली लाल (c2), २री हिरवी (c1) आणि सध्याची (c0) हिरव्याचा High तोडते
+        if side == "BUY":
+            if c2_is_red and c1_is_green:
+                if float(c0['Close']) > float(c1['High']):
+                    return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'BUY'}
+
+        # SELL अट: १ली हिरवी (c2), २री लाल (c1) आणि सध्याची (c0) लालचा Low तोडते
+        if side == "SELL":
+            if c2_is_green and c1_is_red:
+                if float(c0['Close']) < float(c1['Low']):
+                    return {'s': ticker, 'p': round(float(c0['Close']), 2), 't': tm, 'type': 'SELL'}
+                    
     except: return None
     return None
 
 def run_backtest(days=7):
     results = []
-    # वेळ वाचवण्यासाठी प्रत्येक सेक्टरमधील प्रमुख स्टॉक्स तपासणे
     for s_code, tickers in SECTORS.items():
         for t in tickers[:3]: 
             try:
                 df = yf.download(t, period=f'{days}d', interval='5m', progress=False, threads=False)
                 for i in range(2, len(df)):
                     c0, c1, c2 = df.iloc[i], df.iloc[i-1], df.iloc[i-2]
-                    is_inside = (float(c1['High']) < float(c2['High'])) and (float(c1['Low']) > float(c2['Low']))
-                    if is_inside:
-                        time_str = df.index[i].astimezone(IST).strftime('%d-%m %H:%M')
-                        if float(c0['Close']) > float(c1['High']):
-                            results.append({'t': time_str, 's': t, 'type': 'BUY', 'p': round(float(c0['Close']), 2)})
-                        elif float(c0['Close']) < float(c1['Low']):
-                            results.append({'t': time_str, 's': t, 'type': 'SELL', 'p': round(float(c0['Close']), 2)})
+                    
+                    c2_red = float(c2['Close']) < float(c2['Open'])
+                    c2_green = float(c2['Close']) > float(c2['Open'])
+                    c1_green = float(c1['Close']) > float(c1['Open'])
+                    c1_red = float(c1['Close']) < float(c1['Open'])
+
+                    time_str = df.index[i].astimezone(IST).strftime('%d-%m %H:%M')
+
+                    # BUY logic
+                    if c2_red and c1_green and float(c0['Close']) > float(c1['High']):
+                        results.append({'t': time_str, 's': t, 'type': 'BUY', 'p': round(float(c0['Close']), 2)})
+                    # SELL logic
+                    elif c2_green and c1_red and float(c0['Close']) < float(c1['Low']):
+                        results.append({'t': time_str, 's': t, 'type': 'SELL', 'p': round(float(c0['Close']), 2)})
             except: continue
     return sorted(results, key=lambda x: x['t'], reverse=True)
 
@@ -82,7 +106,6 @@ def home():
     now_ist = datetime.now(IST)
     curr_time = now_ist.time()
     
-    # बॅकटेस्ट विनंती आहे का?
     show_bt = request.args.get('bt')
     bt_results = run_backtest() if show_bt else []
 
