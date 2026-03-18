@@ -28,19 +28,22 @@ WATCHLIST = [
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-    try: requests.get(url, params=params, timeout=15)
-    except: pass
+    try: 
+        # टाइमआउट १५ सेकंद केला आहे जेणेकरून मेसेज फेल होणार नाही
+        requests.get(url, params=params, timeout=15)
+    except: 
+        pass
 
 def check_strategy_loop():
+    # सिस्टिम सुरू झाल्याचा मेसेज टेलिग्रामवर पाठवूया
+    send_telegram("✅ *Trading Bot Started Successfully!* Waiting for signals...")
+    
     while True:
         try:
             now_ist = datetime.now(IST)
             today = now_ist.strftime('%Y-%m-%d')
-            # हे लॉगमध्ये दिसेल, म्हणजे आपल्याला कळेल बॉट काम करतोय
-            print(f">>> Scanning Market at {now_ist.strftime('%H:%M:%S')}")
             
             for stock in WATCHLIST:
-                # सुधारित फंक्शन (from_date आणि to_date सह)
                 data = dhan.intraday_minute_data(
                     security_id=stock['sid'],
                     exchange_segment='MCX_FO',
@@ -57,36 +60,34 @@ def check_strategy_loop():
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # तुमच्या चित्राप्रमाणे बॉडी लॉजिक
+                        # तुमच्या चित्राप्रमाणे बॉडी-टू-बॉडी लॉजिक
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
                         if res:
+                            # डुप्लिकेट सिग्नल टाळण्यासाठी
                             if not any(x['s'] == res['s'] and x['type'] == res['type'] and x.get('id_t') == candle_id for x in SIGNAL_HISTORY):
                                 res['t'] = now_ist.strftime('%H:%M:%S')
                                 res['id_t'] = candle_id
                                 SIGNAL_HISTORY.append(res)
                                 icon = "🚀" if res['type'] == "BUY" else "📉"
                                 send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
-                                print(f"!!! SIGNAL SENT: {res['s']} {res['type']}")
+                                print(f"SENT: {res['s']} {res['type']}")
 
         except Exception as e:
-            print(f"Loop Error: {e}")
+            print(f"Error: {e}")
+            pytime.sleep(5) # एरर आली तर ५ सेकंद थांबून पुन्हा प्रयत्न करेल
         
-        pytime.sleep(60) # दर १ मिनिटाला चेक करेल
+        pytime.sleep(60)
 
-# बॅकग्राउंडमध्ये थ्रेड सुरू करा
 threading.Thread(target=check_strategy_loop, daemon=True).start()
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
-    return render_template('index.html', history=SIGNAL_HISTORY[::-1], 
-                           market_open=True, 
-                           date=now_ist.strftime('%d-%m-%Y'), 
-                           time=now_ist.strftime('%H:%M:%S'))
+    return render_template('index.html', history=SIGNAL_HISTORY[::-1], market_open=True, date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
