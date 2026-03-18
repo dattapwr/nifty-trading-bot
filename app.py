@@ -31,33 +31,46 @@ def send_telegram(msg):
     try: requests.get(url, params=params, timeout=10)
     except: pass
 
-def check_strategy(ticker):
+def get_top_sectors():
+    performance = []
+    sector_list = list(SECTORS.keys())
     try:
-        # ५ मिनिटांच्या कॅन्डलवर डेटा मिळवणे
+        # सर्व सेक्टरचा १५ मिनिटांचा डेटा मिळवून परफॉर्मन्स तपासणे
+        data = yf.download(sector_list, period='1d', interval='15m', progress=False)
+        for s_code in sector_list:
+            if s_code in data['Close']:
+                s_data = data.xs(s_code, axis=1, level=1)
+                change = ((s_data['Close'].iloc[-1] - s_data['Open'].iloc[0]) / s_data['Open'].iloc[0]) * 100
+                performance.append({'code': s_code, 'change': float(change)})
+    except: pass
+    
+    performance.sort(key=lambda x: x['change'], reverse=True)
+    return performance[:2], performance[-2:] # टॉप २ मजबूत आणि २ कमकुवत
+
+def check_strategy(ticker, side):
+    try:
         df = yf.download(ticker, period='1d', interval='5m', progress=False, threads=True)
-        if len(df) < 3: return None
+        if len(df) < 2: return None
         
-        # Yahoo Finance चा डेटा उशिरा येतो, म्हणून आपण शेवटच्या २ कॅण्डल्स तपासतो
-        for i in range(-1, -3, -1):
-            curr = df.iloc[i]
-            prev = df.iloc[i-1]
-            
-            curr_green = float(curr['Close']) > float(curr['Open'])
-            curr_red = float(curr['Close']) < float(curr['Open'])
-            prev_green = float(prev['Close']) > float(prev['Open'])
-            prev_red = float(prev['Close']) < float(prev['Open'])
-            
-            # कॅन्डलची वेळ (ID साठी)
-            candle_time = df.index[i].astimezone(IST).strftime('%H:%M')
-            display_time = datetime.now(IST).strftime('%H:%M:%S')
+        # मागील २ कॅण्डल्सची अट (१ली लाल, २री हिरवी किंवा उलट)
+        curr = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        curr_green = float(curr['Close']) > float(curr['Open'])
+        curr_red = float(curr['Close']) < float(curr['Open'])
+        prev_green = float(prev['Close']) > float(prev['Open'])
+        prev_red = float(prev['Close']) < float(prev['Open'])
+        
+        candle_id = df.index[-1].astimezone(IST).strftime('%H:%M')
+        display_time = datetime.now(IST).strftime('%H:%M:%S')
 
-            # BUY: मागील लाल (c1) + आताची हिरवी (c0)
-            if prev_red and curr_green:
-                return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_time, 'type': 'BUY'}
+        # BUY: मागील लाल + आताची हिरवी
+        if side == "BUY" and prev_red and curr_green:
+            return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_id, 'type': 'BUY'}
 
-            # SELL: मागील हिरवी (c1) + आताची लाल (c0)
-            if prev_green and curr_red:
-                return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_time, 'type': 'SELL'}
+        # SELL: मागील हिरवी + आताची लाल
+        if side == "SELL" and prev_green and curr_red:
+            return {'s': ticker, 'p': round(float(curr['Close']), 2), 't': display_time, 'id_t': candle_id, 'type': 'SELL'}
     except: return None
     return None
 
@@ -69,16 +82,27 @@ def home():
     
     found_stocks = []
     if market_active:
-        for sector, tickers in SECTORS.items():
-            for t in tickers:
-                res = check_strategy(t)
+        top_2, bottom_2 = get_top_sectors()
+        
+        # टॉप २ सेक्टर्समध्ये फक्त BUY ट्रेड्स शोधणे
+        for s in top_2:
+            for t in SECTORS[s['code']]:
+                res = check_strategy(t, "BUY")
                 if res:
                     found_stocks.append(res)
-                    # जर हा सिग्नल त्याच वेळेसाठी इतिहासात नसेल तरच पाठवा
-                    if not any(x['s'] == t and x['type'] == res['type'] and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
+                    if not any(x['s'] == t and x['type'] == "BUY" and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
                         SIGNAL_HISTORY.append(res)
-                        icon = "🚀" if res['type'] == "BUY" else "📉"
-                        send_telegram(f"{icon} *{res['type']}:* `{t}` @ ₹{res['p']}\n⏰ Time: {res['t']}")
+                        send_telegram(f"🚀 *BUY:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}")
+
+        # बॉटम २ सेक्टर्समध्ये फक्त SELL ट्रेड्स शोधणे
+        for s in bottom_2:
+            for t in SECTORS[s['code']]:
+                res = check_strategy(t, "SELL")
+                if res:
+                    found_stocks.append(res)
+                    if not any(x['s'] == t and x['type'] == "SELL" and x['id_t'] == res['id_t'] for x in SIGNAL_HISTORY):
+                        SIGNAL_HISTORY.append(res)
+                        send_telegram(f"📉 *SELL:* `{t}` @ ₹{res['p']}\n📊 Sector: {s['code']}")
 
     return render_template('index.html', stocks=found_stocks, history=SIGNAL_HISTORY[::-1], 
                            market_open=market_active,
