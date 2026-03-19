@@ -14,59 +14,69 @@ ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 IST = pytz.timezone('Asia/Kolkata')
 
-WATCHLIST = [
-    {'symbol': 'RELIANCE', 'sid': '2885'}, {'symbol': 'TCS', 'sid': '11536'},
-    {'symbol': 'HDFCBANK', 'sid': '1333'}, {'symbol': 'ICICIBANK', 'sid': '4963'},
-    {'symbol': 'INFY', 'sid': '1594'}, {'symbol': 'SBIN', 'sid': '3045'},
-    {'symbol': 'BHARTIARTL', 'sid': '10604'}, {'symbol': 'LICI', 'sid': '11802'},
-    {'symbol': 'ITC', 'sid': '1660'}, {'symbol': 'HINDUNILVR', 'sid': '1394'}
+# टेलिग्राम डिटेल्स
+TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
+CHAT_ID = "799650120"
+
+# Crude Oil MCX डिटेल्स (March Future)
+# टीप: दर महिन्याला 'sid' बदलावा लागू शकतो
+CRUDE_OIL_LIST = [
+    {'symbol': 'CRUDE OIL MAR FUT', 'sid': '420844'} # MCX मार्च फ्युचर आयडी
 ]
 
-def get_live_data():
+def send_signal(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
+    try: requests.get(url, params=params, timeout=5)
+    except: pass
+
+def process_crude_strategy():
     results = {}
     today = datetime.now(IST).strftime('%Y-%m-%d')
-    for stock in WATCHLIST:
+    for item in CRUDE_OIL_LIST:
         try:
-            data = dhan.intraday_minute_data(stock['sid'], 'NSE_EQ', 'EQUITY', today, today)
-            if data and data.get('status') == 'success':
-                results[stock['symbol']] = data['data']['close'][-1]
-        except:
-            continue
+            # MCX साठी exchange_segment 'MCX_FO' वापरावा लागतो
+            data = dhan.intraday_minute_data(item['sid'], 'MCX_FO', 'FUTIDX', today, today)
+            if data and data.get('status') == 'success' and 'data' in data:
+                d = data['data']
+                ltp = d['close'][-1]
+                results[item['symbol']] = ltp
+                
+                # बॉडी-टू-बॉडी ट्रेडिंग लॉजिक
+                if len(d['close']) >= 2:
+                    po, pc, cc = d['open'][-2], d['close'][-2], d['close'][-1]
+                    if po > pc and cc > po:
+                        send_signal(f"🛢️ *CRUDE OIL BUY*\nPrice: ₹{cc}")
+                    elif pc > po and cc < po:
+                        send_signal(f"🛢️ *CRUDE OIL SELL*\nPrice: ₹{cc}")
+        except Exception as e:
+            print(f"Error: {e}")
     return results
 
 @app.route('/')
 def home():
-    prices = get_live_data() # पेज लोड होताच डेटा खेचणे
+    prices = process_crude_strategy()
     now = datetime.now(IST).strftime('%H:%M:%S')
-    
-    html = """
+    return render_template_string("""
     <!DOCTYPE html>
     <html>
-    <head>
-        <meta http-equiv="refresh" content="30">
-        <title>Live Scanner</title>
-        <style>
-            body { font-family: sans-serif; text-align: center; background: #f4f7f6; padding: 20px; }
-            .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 400px; }
-            .item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
-            .online { color: green; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>📈 Live Prices <span class="online">●</span></h2>
+    <head><meta http-equiv="refresh" content="30"><title>Crude Oil Bot</title></head>
+    <body style="font-family:sans-serif; text-align:center; background:#2c3e50; color:white;">
+        <div style="background:#34495e; padding:30px; border-radius:15px; display:inline-block; margin-top:50px; box-shadow:0 10px 20px rgba(0,0,0,0.5);">
+            <h1 style="color:#f1c40f;">🛢️ Crude Oil Live</h1>
             <p>Last Sync: {{ last_time }}</p>
-            <hr>
+            <hr style="border:0; border-top:1px solid #7f8c8d;">
             {% for s, p in ltp.items() %}
-                <div class="item"><span>{{ s }}</span> <b>₹{{ p }}</b></div>
+                <div style="font-size:24px; margin:20px;">
+                    <span>{{ s }}:</span> <b style="color:#2ecc71;">₹{{ p }}</b>
+                </div>
             {% else %}
-                <p>डेटा मिळत नाहीये. कृपया टोकन तपासा.</p>
+                <p>डेटा येत नाहीये. <br>MCX चा डेटा मिळवण्यासाठी धन वर MCX सेगमेंट चालू असल्याची खात्री करा.</p>
             {% endfor %}
         </div>
     </body>
     </html>
-    """
-    return render_template_string(html, ltp=prices, last_time=now)
+    """, ltp=prices, last_time=now)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
