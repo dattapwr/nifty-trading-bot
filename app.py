@@ -9,9 +9,9 @@ from dhanhq import dhanhq
 
 app = Flask(__name__)
 
-# --- तुमचे धन डिटेल्स (नवीन टोकन असल्याची खात्री करा) ---
+# --- तुमचे धन डिटेल्स ---
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" 
+ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" # तुमचा नवीन टोकन इथे टाका
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
@@ -20,7 +20,7 @@ CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
-LAST_CHECK_TIME = "प्रतीक्षा करत आहे..."
+LAST_CHECK_TIME = "Checking..."
 
 WATCHLIST = [
     {'symbol': 'RELIANCE', 'sid': '2885'}
@@ -36,7 +36,7 @@ def send_telegram(msg):
 
 def check_strategy_loop():
     global LAST_CHECK_TIME
-    send_telegram("🚀 *Reliance Bot is now LIVE!* \nChecking for real Buy/Sell signals...")
+    send_telegram("🚀 *Reliance Bot is now ACTIVE!* \nWatching for Body-to-Body signals...")
     
     while True:
         try:
@@ -60,13 +60,13 @@ def check_strategy_loop():
                 if data and data.get('status') == 'success' and 'data' in data:
                     d = data['data']
                     if 'open' in d and len(d['open']) >= 2:
-                        prev_o = float(d['open'][-2]) # आदल्या कॅंडलचा ओपन
-                        prev_c = float(d['close'][-2]) # आदल्या कॅंडलचा क्लोज
-                        curr_c = float(d['close'][-1]) # चालू कॅंडलचा क्लोज
+                        prev_o = float(d['open'][-2])
+                        prev_c = float(d['close'][-2])
+                        curr_c = float(d['close'][-1])
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # --- रिलायन्स बॉडी टू बॉडी लॉजिक ---
+                        # --- खरे ट्रेडिंग लॉजिक ---
                         # BUY: आदली कॅंडल लाल आणि चालू क्लोजिंग आदल्या ओपनच्या वर
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
@@ -76,18 +76,18 @@ def check_strategy_loop():
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
                         if res:
-                            # एकाच कॅंडलवर दोनदा मेसेज टाळण्यासाठी
+                            # एकाच कॅंडलवर पुन्हा मेसेज नको म्हणून चेक
                             if not any(x['s'] == res['s'] and x['id_t'] == candle_id for x in SIGNAL_HISTORY):
                                 res['t'] = now_ist.strftime('%H:%M:%S')
                                 res['id_t'] = candle_id
                                 SIGNAL_HISTORY.append(res)
                                 icon = "🟢" if res['type'] == "BUY" else "🔴"
-                                send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
+                                send_telegram(f"{icon} *{res['type']} SIGNAL*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
 
         except Exception as e:
             print(f"Loop Error: {e}")
         
-        pytime.sleep(60) # दर १ मिनिटाला चेक करा
+        pytime.sleep(60)
 
 threading.Thread(target=check_strategy_loop, daemon=True).start()
 
@@ -98,27 +98,27 @@ def home():
     <html>
     <head>
         <meta http-equiv="refresh" content="30">
-        <title>Reliance Bot Live</title>
+        <title>Reliance Scanner</title>
         <style>
-            body { font-family: sans-serif; text-align: center; background: #eceff1; padding: 50px; }
-            .card { background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border-top: 5px solid #28a745; }
+            body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 40px; }
+            .card { background: white; padding: 25px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 6px solid #28a745; min-width: 300px; }
             .buy { color: #28a745; font-weight: bold; }
             .sell { color: #dc3545; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="card">
-            <h1>Reliance Bot: <span style="color:#28a745;">ACTIVE</span></h1>
-            <p><b>Last Market Scan:</b> {{ last_time }}</p>
-            <p><b>Real Signals Found:</b> {{ count }}</p>
+            <h2>RELIANCE: <span style="color:#28a745;">ACTIVE</span></h2>
+            <p><b>Market Scan At:</b> {{ last_time }}</p>
+            <p><b>Signals Today:</b> {{ count }}</p>
             <hr>
-            <h3>Live Signal Log:</h3>
+            <h4>History:</h4>
             {% if history %}
                 {% for s in history %}
-                    <p class="{{ s.type.lower() }}">[{{ s.t }}] {{ s.s }} - {{ s.type }} @ {{ s.p }}</p>
+                    <p class="{{ s.type.lower() }}">[{{ s.t }}] {{ s.type }} @ {{ s.p }}</p>
                 {% endfor %}
             {% else %}
-                <p>मार्केट सुरू होण्याची आणि कंडिशन मॅच होण्याची वाट पाहत आहे...</p>
+                <p style="color:gray;">कंडिशन मॅच होण्याची वाट पाहत आहे...</p>
             {% endif %}
         </div>
     </body>
