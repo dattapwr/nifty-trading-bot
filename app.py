@@ -18,10 +18,9 @@ IST = pytz.timezone('Asia/Kolkata')
 TOKEN = "8581468481:AAEkpYl2W68kUDt-unA_qvSpgTeOiXRFji8"
 CHAT_ID = "799650120"
 
-# Crude Oil MCX डिटेल्स (March Future)
-# टीप: दर महिन्याला 'sid' बदलावा लागू शकतो
+# Crude Oil MCX मार्च फ्युचर डिटेल्स
 CRUDE_OIL_LIST = [
-    {'symbol': 'CRUDE OIL MAR FUT', 'sid': '420844'} # MCX मार्च फ्युचर आयडी
+    {'symbol': 'CRUDE OIL MAR FUT', 'sid': '420844'} 
 ]
 
 def send_signal(msg):
@@ -35,20 +34,24 @@ def process_crude_strategy():
     today = datetime.now(IST).strftime('%Y-%m-%d')
     for item in CRUDE_OIL_LIST:
         try:
-            # MCX साठी exchange_segment 'MCX_FO' वापरावा लागतो
-            data = dhan.intraday_minute_data(item['sid'], 'MCX_FO', 'FUTIDX', today, today)
+            # सुधारणा: 'MCX_FO' च्या जागी फक्त 'MCX' वापरा
+            data = dhan.intraday_minute_data(item['sid'], 'MCX', 'FWD', today, today)
+            
             if data and data.get('status') == 'success' and 'data' in data:
                 d = data['data']
-                ltp = d['close'][-1]
-                results[item['symbol']] = ltp
-                
-                # बॉडी-टू-बॉडी ट्रेडिंग लॉजिक
-                if len(d['close']) >= 2:
-                    po, pc, cc = d['open'][-2], d['close'][-2], d['close'][-1]
-                    if po > pc and cc > po:
-                        send_signal(f"🛢️ *CRUDE OIL BUY*\nPrice: ₹{cc}")
-                    elif pc > po and cc < po:
-                        send_signal(f"🛢️ *CRUDE OIL SELL*\nPrice: ₹{cc}")
+                if d.get('close'):
+                    ltp = d['close'][-1]
+                    results[item['symbol']] = ltp
+                    
+                    # सिग्नल लॉजिक
+                    if len(d['close']) >= 2:
+                        po, pc, cc = d['open'][-2], d['close'][-2], d['close'][-1]
+                        if po > pc and cc > po:
+                            send_signal(f"🛢️ *CRUDE OIL BUY*\nPrice: ₹{cc}")
+                        elif pc > po and cc < po:
+                            send_signal(f"🛢️ *CRUDE OIL SELL*\nPrice: ₹{cc}")
+            else:
+                print(f"API Error for {item['symbol']}: {data}")
         except Exception as e:
             print(f"Error: {e}")
     return results
@@ -67,11 +70,15 @@ def home():
             <p>Last Sync: {{ last_time }}</p>
             <hr style="border:0; border-top:1px solid #7f8c8d;">
             {% for s, p in ltp.items() %}
-                <div style="font-size:24px; margin:20px;">
+                <div style="font-size:32px; margin:20px;">
                     <span>{{ s }}:</span> <b style="color:#2ecc71;">₹{{ p }}</b>
                 </div>
             {% else %}
-                <p>डेटा येत नाहीये. <br>MCX चा डेटा मिळवण्यासाठी धन वर MCX सेगमेंट चालू असल्याची खात्री करा.</p>
+                <div style="padding:20px; background:#e74c3c; border-radius:10px;">
+                    <p>⚠️ डेटा अद्याप येत नाहीये!</p>
+                    <p style="font-size:14px;">१. नवीन टोकन जनरेट करताना 'Market Data' टिक केल्याची खात्री करा.<br>
+                    २. MCX मार्केट सकाळी ९ ते रात्री ११:३० दरम्यानच चालू असते.</p>
+                </div>
             {% endfor %}
         </div>
     </body>
