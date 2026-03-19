@@ -1,3 +1,4 @@
+
 import os
 import pytz
 import requests
@@ -20,10 +21,11 @@ CHAT_ID = "799650120"
 IST = pytz.timezone('Asia/Kolkata')
 
 SIGNAL_HISTORY = []
-LAST_CHECK_TIME = "Checking..."
-DATA_STATUS = "Initializing..."
+LAST_CHECK_TIME = "प्रतीक्षा करत आहे..."
+DATA_STATUS = "सुरू होत आहे..."
 CURRENT_LTP = {}
 
+# २० प्रमुख स्टॉक्सची यादी
 WATCHLIST = [
     {'symbol': 'RELIANCE', 'sid': '2885'}, {'symbol': 'TCS', 'sid': '11536'},
     {'symbol': 'HDFCBANK', 'sid': '1333'}, {'symbol': 'ICICIBANK', 'sid': '4963'},
@@ -43,6 +45,7 @@ def scan_markets():
     LAST_CHECK_TIME = now_ist.strftime('%H:%M:%S')
     today = now_ist.strftime('%Y-%m-%d')
     
+    found_any_data = False
     for stock in WATCHLIST:
         try:
             data = dhan.intraday_minute_data(
@@ -51,12 +54,13 @@ def scan_markets():
             )
             
             if data and data.get('status') == 'success':
-                DATA_STATUS = "Connected ✅"
+                found_any_data = True
                 d = data.get('data', {})
                 if d and 'close' in d and len(d['close']) > 0:
                     cc = d['close'][-1]
                     CURRENT_LTP[stock['symbol']] = cc
                     
+                    # बॉडी-टू-बॉडी ट्रेडिंग लॉजिक (५ मिनिटे)
                     if len(d['close']) >= 2:
                         po, pc = d['open'][-2], d['close'][-2]
                         cid = d['start_Time'][-1]
@@ -67,20 +71,24 @@ def scan_markets():
                         
                         if res and not any(x['s'] == stock['symbol'] and x['id_t'] == cid for x in SIGNAL_HISTORY):
                             msg = f"{'🟢' if res=='BUY' else '🔴'} *{res} SIGNAL*\nStock: `{stock['symbol']}`\nPrice: ₹{cc}"
-                            requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown")
+                            requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown", timeout=5)
                             SIGNAL_HISTORY.append({'s': stock['symbol'], 'p': cc, 'type': res, 't': LAST_CHECK_TIME, 'id_t': cid})
-            else:
-                DATA_STATUS = f"API Error: {data.get('remarks', 'Invalid Response')}"
-                print(f"Debug: {data}")
-        except Exception as e:
-            DATA_STATUS = f"System Error: {str(e)[:20]}"
-        pytime.sleep(0.3)
+            
+            pytime.sleep(0.3) # API Rate Limit टाळण्यासाठी
+            
+        except Exception:
+            continue
+
+    DATA_STATUS = "Connected ✅" if found_any_data else "API Error ❌"
 
 def background_loop():
+    # बोट सुरू झाल्याचा मेसेज
+    requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=🚀 *Scanner Live with 20 Stocks!*", timeout=5)
     while True:
         scan_markets()
         pytime.sleep(60)
 
+# बॅकग्राउंड थ्रेड सुरू करा
 threading.Thread(target=background_loop, daemon=True).start()
 
 @app.route('/')
@@ -94,21 +102,21 @@ def home():
         <style>
             body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f2f5; margin: 0; padding: 20px; }
             .container { background: white; max-width: 600px; margin: auto; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-            .status-bar { padding: 10px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; }
-            .online { background: #d4edda; color: #155724; }
-            .offline { background: #f8d7da; color: #721c24; }
+            .status-bar { padding: 10px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 14px; }
+            .online { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .offline { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
             .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
-            .stock-card { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #dee2e6; font-size: 14px; text-align: left; }
+            .stock-card { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #dee2e6; font-size: 13px; text-align: left; }
             .buy { color: #28a745; font-weight: bold; }
             .sell { color: #dc3545; font-weight: bold; }
-            hr { border: 0; border-top: 1px solid #eee; }
+            h2 { color: #333; margin-bottom: 5px; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h2>📈 Market Scanner</h2>
+            <h2>📈 20 Stocks Scanner</h2>
             <div class="status-bar {% if '✅' in status %} online {% else %} offline {% endif %}">
-                Status: {{ status }} | Time: {{ last_time }}
+                Status: {{ status }} | Last Scan: {{ last_time }}
             </div>
             
             <div class="grid">
@@ -117,12 +125,12 @@ def home():
                 {% endfor %}
             </div>
 
-            <hr>
+            <hr style="border:0; border-top:1px solid #eee;">
             <h3>Latest Signals</h3>
             {% for s in history %}
-                <p class="{{ s.type.lower() }}">[{{ s.t }}] {{ s.s }} - {{ s.type }} @ {{ s.p }}</p>
+                <p class="{{ s.type.lower() }}">[{{ s.t }}] {{ s.s }} - {{ s.type }} @ ₹{{ s.p }}</p>
             {% else %}
-                <p style="color: #666;">अटी पूर्ण होण्याची वाट पाहत आहे...</p>
+                <p style="color: #666; font-style: italic;">सिग्नलची वाट पाहत आहे...</p>
             {% endfor %}
         </div>
     </body>
