@@ -77,7 +77,8 @@ def check_strategy_loop():
                         res = None
                         
                         # --- मुख्य लॉजिक (Body to Body) ---
-                        if prev_o > prev_c and curr_c > prev_o:
+                        if True: # ही टेस्ट कंडिशन आहे
+
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
