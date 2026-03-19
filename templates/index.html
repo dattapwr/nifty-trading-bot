@@ -1,56 +1,41 @@
-import os
-import requests
-from flask import Flask, render_template
-from dhanhq import dhanhq
-from datetime import datetime
-
-app = Flask(__name__)
-
-# --- तुमची माहिती भरा ---
-CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "तुमचा_टोकन_इथे_टाका"
-TELEGRAM_BOT_TOKEN = "तुमचा_बॉट_टोकन"
-TELEGRAM_CHAT_ID = "तुमचा_चॅट_आयडी"
-
-dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
-signals = []
-
-def send_telegram(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={msg}"
-        requests.get(url)
-    except:
-        pass
-
-@app.route('/')
-def index():
-    try:
-        # Crude Oil March Fut (Security ID अंदाजे 420844 असते, एकदा चेक करा)
-        data = dhan.historical_minute_charts(420844, 'MCX', 'INTRA')
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crude Oil Scanner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0d1117; color: white; padding: 20px; }
+        .signal-card { background: #161b22; border-left: 10px solid #238636; border-radius: 10px; padding: 20px; margin-bottom: 15px; }
+        .buy-badge { background-color: #238636; color: white; padding: 5px 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container text-center">
+        <h2 class="mb-4 text-warning">⛽ Crude Oil Live Signal (Engulfing)</h2>
         
-        if data and 'data' in data:
-            candles = data['data']
-            if len(candles) >= 2:
-                prev = candles[-2] # मागील कँडल
-                curr = candles[-1] # आताची कँडल
-                
-                # अट: लाल कँडल (p_open > p_close) आणि हिरवी कँडल (c_close > c_open)
-                # आणि हिरव्या कँडलची बॉडी लाल कँडलच्या वर क्लोज झाली पाहिजे
-                if prev['open'] > prev['close'] and curr['close'] > curr['open']:
-                    if curr['close'] > prev['open']:
-                        time_now = datetime.now().strftime("%H:%M:%S")
-                        msg = f"🚀 CRUDE OIL BREAKOUT!\nPrice: {curr['close']}\nTime: {time_now}"
-                        
-                        # डुप्लिकेट मेसेज टाळण्यासाठी तपासणी
-                        if not signals or signals[0]['t'] != time_now:
-                            send_telegram(msg)
-                            signals.insert(0, {'t': time_now, 's': 'CRUDE OIL', 'type': 'BUY', 'p': curr['close']})
+        {% for s in stocks %}
+        <div class="signal-card shadow">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4>{{ s.s }}</h4>
+                    <small class="text-muted">{{ s.t }}</small>
+                </div>
+                <div>
+                    <span class="buy-badge">STRONG BUY</span>
+                    <h3 class="mt-2">₹{{ s.p }}</h3>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">अजून कोणताही ब्रेकआऊट मिळालेला नाही. शोध सुरू आहे...</div>
+        {% endfor %}
+    </div>
 
-        return render_template('index.html', stocks=signals[:10], market_open=True)
-    
-    except Exception as e:
-        return f"कनेक्शन एरर: {str(e)}. कृपया तुमचा टोकन आणि इंटरनेट तपासा."
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    <script>
+        // दर ३० सेकंदाला पेज ऑटो रिफ्रेश होईल
+        setTimeout(function(){ location.reload(); }, 30000);
+    </script>
+</body>
+</html>
