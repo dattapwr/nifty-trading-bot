@@ -9,9 +9,9 @@ from dhanhq import dhanhq
 
 app = Flask(__name__)
 
-# --- तुमचे धन डिटेल्स ---
+# --- तुमचे धन डिटेल्स (सुरक्षेसाठी टोकन कोणालाही देऊ नका) ---
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" # तुमचा नवीन टोकन इथे टाका
+ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" # <--- तुमचा नवीन टोकन इथे टाका
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
@@ -22,8 +22,18 @@ IST = pytz.timezone('Asia/Kolkata')
 SIGNAL_HISTORY = []
 LAST_CHECK_TIME = "Checking..."
 
+# --- २० टॉप स्टॉक्सची यादी ---
 WATCHLIST = [
-    {'symbol': 'RELIANCE', 'sid': '2885'}
+    {'symbol': 'RELIANCE', 'sid': '2885'}, {'symbol': 'TCS', 'sid': '11536'},
+    {'symbol': 'HDFCBANK', 'sid': '1333'}, {'symbol': 'ICICIBANK', 'sid': '4963'},
+    {'symbol': 'INFY', 'sid': '1594'}, {'symbol': 'SBIN', 'sid': '3045'},
+    {'symbol': 'BHARTIARTL', 'sid': '10604'}, {'symbol': 'LICI', 'sid': '11802'},
+    {'symbol': 'ITC', 'sid': '1660'}, {'symbol': 'HINDUNILVR', 'sid': '1394'},
+    {'symbol': 'LT', 'sid': '11483'}, {'symbol': 'BAJFINANCE', 'sid': '317'},
+    {'symbol': 'KOTAKBANK', 'sid': '1922'}, {'symbol': 'ADANIENT', 'sid': '25'},
+    {'symbol': 'AXISBANK', 'sid': '5900'}, {'symbol': 'ASIANPAINT', 'sid': '236'},
+    {'symbol': 'MARUTI', 'sid': '10999'}, {'symbol': 'SUNPHARMA', 'sid': '3351'},
+    {'symbol': 'TITAN', 'sid': '3506'}, {'symbol': 'TATASTEEL', 'sid': '3499'}
 ]
 
 def send_telegram(msg):
@@ -36,7 +46,7 @@ def send_telegram(msg):
 
 def check_strategy_loop():
     global LAST_CHECK_TIME
-    send_telegram("🚀 *Reliance Bot is now ACTIVE!* \nWatching for Body-to-Body signals...")
+    send_telegram("🚀 *20 Stocks Scanner Active!* \nMonitoring NSE Market...")
     
     while True:
         try:
@@ -54,8 +64,8 @@ def check_strategy_loop():
                         from_date=today,
                         to_date=today
                     )
-                except Exception as e:
-                    print(f"API Error: {e}")
+                except:
+                    continue # एरर आल्यास पुढच्या स्टॉककडे जा
 
                 if data and data.get('status') == 'success' and 'data' in data:
                     d = data['data']
@@ -66,26 +76,25 @@ def check_strategy_loop():
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # --- खरे ट्रेडिंग लॉजिक ---
-                        # BUY: आदली कॅंडल लाल आणि चालू क्लोजिंग आदल्या ओपनच्या वर
+                        # --- मुख्य ट्रेडिंग लॉजिक ---
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
-                        
-                        # SELL: आदली कॅंडल हिरवी आणि चालू क्लोजिंग आदल्या ओपनच्या खाली
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
                         if res:
-                            # एकाच कॅंडलवर पुन्हा मेसेज नको म्हणून चेक
+                            # डुप्लिकेट चेक
                             if not any(x['s'] == res['s'] and x['id_t'] == candle_id for x in SIGNAL_HISTORY):
                                 res['t'] = now_ist.strftime('%H:%M:%S')
                                 res['id_t'] = candle_id
                                 SIGNAL_HISTORY.append(res)
                                 icon = "🟢" if res['type'] == "BUY" else "🔴"
-                                send_telegram(f"{icon} *{res['type']} SIGNAL*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
+                                send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
+
+                pytime.sleep(0.5) # धन API चा वेग सांभाळण्यासाठी गॅप
 
         except Exception as e:
-            print(f"Loop Error: {e}")
+            print(f"Error: {e}")
         
         pytime.sleep(60)
 
@@ -98,28 +107,29 @@ def home():
     <html>
     <head>
         <meta http-equiv="refresh" content="30">
-        <title>Reliance Scanner</title>
+        <title>20 Stock Scanner</title>
         <style>
-            body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 40px; }
-            .card { background: white; padding: 25px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 6px solid #28a745; min-width: 300px; }
+            body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 30px; }
+            .card { background: white; padding: 25px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 6px solid #007bff; min-width: 350px; }
             .buy { color: #28a745; font-weight: bold; }
             .sell { color: #dc3545; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border-bottom: 1px solid #ddd; padding: 8px; font-size: 14px; }
         </style>
     </head>
     <body>
         <div class="card">
-            <h2>RELIANCE: <span style="color:#28a745;">ACTIVE</span></h2>
-            <p><b>Market Scan At:</b> {{ last_time }}</p>
-            <p><b>Signals Today:</b> {{ count }}</p>
+            <h2>Market Scanner: <span style="color:#007bff;">LIVE</span></h2>
+            <p><b>Last Scan:</b> {{ last_time }} | <b>Total:</b> {{ count }}</p>
             <hr>
-            <h4>History:</h4>
-            {% if history %}
+            <table>
+                <tr><th>Time</th><th>Stock</th><th>Type</th><th>Price</th></tr>
                 {% for s in history %}
-                    <p class="{{ s.type.lower() }}">[{{ s.t }}] {{ s.type }} @ {{ s.p }}</p>
+                    <tr class="{{ s.type.lower() }}">
+                        <td>{{ s.t }}</td><td>{{ s.s }}</td><td>{{ s.type }}</td><td>{{ s.p }}</td>
+                    </tr>
                 {% endfor %}
-            {% else %}
-                <p style="color:gray;">कंडिशन मॅच होण्याची वाट पाहत आहे...</p>
-            {% endif %}
+            </table>
         </div>
     </body>
     </html>
