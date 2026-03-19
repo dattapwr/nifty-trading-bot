@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # --- धन क्रेडेंशियल्स ---
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "EyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTk1NDIwLCJpYXQiOjE3NzM5MDkwMjAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.tY2eexkpvfD2DLJxEWM9-67HY2sVhbBtHIuEKCmIIGlnhbpeUM5N5uwQJgH-2Hlib7APt6Lc8RP4rHI6gpmY1A"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTk1NDIwLCJpYXQiOjE3NzM5MDkwMjAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.tY2eexkpvfD2DLJxEWM9-67HY2sVhbBtHIuEKCmIIGlnhbpeUM5N5uwQJgH-2Hlib7APt6Lc8RP4rHI6gpmY1A"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 IST = pytz.timezone('Asia/Kolkata')
