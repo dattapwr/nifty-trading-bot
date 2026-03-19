@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 # --- तुमचे धन डिटेल्स ---
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTAxNzcwLCJpYXQiOjE3NzM4MTUzNzAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.IxHMt3yaFEGdmNmD0OoJRQ4LI0_74gicUNJMxRgMQP7ca7qrEokD5KZ9ssWfZUtKMhOcfKWZ7_G7cZH_QdkacA"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9..." # तुमचा पूर्ण टोकन इथे ठेवा
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
@@ -29,14 +29,12 @@ def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try: 
-        # टाइमआउट १५ सेकंद केला आहे जेणेकरून मेसेज फेल होणार नाही
-        requests.get(url, params=params, timeout=15)
+        requests.get(url, params=params, timeout=10)
     except: 
         pass
 
 def check_strategy_loop():
-    # सिस्टिम सुरू झाल्याचा मेसेज टेलिग्रामवर पाठवूया
-    send_telegram("✅ *Trading Bot Started Successfully!* Waiting for signals...")
+    send_telegram("✅ *Trading Bot Started!* Checking signals every minute...")
     
     while True:
         try:
@@ -44,52 +42,74 @@ def check_strategy_loop():
             today = now_ist.strftime('%Y-%m-%d')
             
             for stock in WATCHLIST:
-                data = dhan.intraday_minute_data(
-                    security_id=stock['sid'],
-                    exchange_segment='MCX_FO',
-                    instrument_type='FUTCOM',
-                    from_date=today,
-                    to_date=today
-                )
+                # --- Connection Error टाळण्यासाठी Retry Logic ---
+                data = None
+                for attempt in range(3): 
+                    try:
+                        data = dhan.intraday_minute_data(
+                            security_id=stock['sid'],
+                            exchange_segment='MCX_FO',
+                            instrument_type='FUTCOM',
+                            from_date=today,
+                            to_date=today
+                        )
+                        if data.get('status') == 'success':
+                            break
+                    except:
+                        pytime.sleep(2)
 
-                if data.get('status') == 'success' and 'data' in data:
+                # --- डेटा चेक आणि सिग्नल लॉजिक ---
+                if data and data.get('status') == 'success' and 'data' in data:
                     d = data['data']
+                    # खात्री करा की किमान २ कॅंडल्सचा डेटा आहे
                     if 'open' in d and len(d['open']) >= 2:
-                        prev_o, prev_c = float(d['open'][-2]), float(d['close'][-2])
+                        # शेवटून दुसरी कॅंडल (Previous) आणि शेवटची कॅंडल (Current)
+                        prev_o = float(d['open'][-2])
+                        prev_c = float(d['close'][-2])
+                        curr_o = float(d['open'][-1])
                         curr_c = float(d['close'][-1])
                         candle_id = d['start_Time'][-1]
                         
                         res = None
-                        # तुमच्या चित्राप्रमाणे बॉडी-टू-बॉडी लॉजिक
+                        
+                        # --- सुधारित लॉजिक (Body to Body) ---
+                        # BUY: आदल्या रेड कॅंडलच्या 'ओपन'च्या वर क्लोजिंग मिळाले तर
                         if prev_o > prev_c and curr_c > prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'BUY'}
+                        
+                        # SELL: आदल्या ग्रीन कॅंडलच्या 'ओपन'च्या खाली क्लोजिंग मिळाले तर
                         elif prev_c > prev_o and curr_c < prev_o:
                             res = {'s': stock['symbol'], 'p': round(curr_c, 2), 'type': 'SELL'}
 
                         if res:
-                            # डुप्लिकेट सिग्नल टाळण्यासाठी
-                            if not any(x['s'] == res['s'] and x['type'] == res['type'] and x.get('id_t') == candle_id for x in SIGNAL_HISTORY):
+                            # डुप्लिकेट सिग्नल टाळण्यासाठी चेक
+                            is_duplicate = any(x['s'] == res['s'] and x['id_t'] == candle_id for x in SIGNAL_HISTORY)
+                            
+                            if not is_duplicate:
                                 res['t'] = now_ist.strftime('%H:%M:%S')
                                 res['id_t'] = candle_id
                                 SIGNAL_HISTORY.append(res)
+                                
                                 icon = "🚀" if res['type'] == "BUY" else "📉"
                                 send_telegram(f"{icon} *{res['type']} ALERT*\n\nStock: `{res['s']}`\nPrice: ₹{res['p']}\nTime: {res['t']}")
-                                print(f"SENT: {res['s']} {res['type']}")
+                                print(f"SIGNAL SENT: {res['s']} {res['type']}")
+
+                # दोन स्टॉकच्या मध्ये छोटा गॅप (Rate limit टाळण्यासाठी)
+                pytime.sleep(1)
 
         except Exception as e:
-            print(f"Error: {e}")
-            pytime.sleep(5) # एरर आली तर ५ सेकंद थांबून पुन्हा प्रयत्न करेल
+            print(f"Loop Error: {e}")
         
+        # पुढच्या मिनिटासाठी वाट पाहणे
         pytime.sleep(60)
 
+# Thread सुरू करणे
 threading.Thread(target=check_strategy_loop, daemon=True).start()
 
 @app.route('/')
 def home():
     now_ist = datetime.now(IST)
     return render_template('index.html', history=SIGNAL_HISTORY[::-1], market_open=True, date=now_ist.strftime('%d-%m-%Y'), time=now_ist.strftime('%H:%M:%S'))
-# टेस्ट मेसेज पाठवण्यासाठी ही ओळ एकदाच वापरा
-send_telegram("🔔 *System Test:* दत्तात्रयजी, तुमची सिस्टिम आता पूर्णपणे कनेक्ट झाली आहे!")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
