@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 # --- तुमचे धन डिटेल्स (सुरक्षेसाठी टोकन कोणालाही देऊ नका) ---
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" # <--- तुमचा नवीन टोकन इथे टाका
+ACCESS_TOKEN = "YOUR_NEW_TOKEN_HERE" #ा eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTg4NTQ0LCJpYXQiOjE3NzM5MDIxNDQsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.WuoT0B6J3BrABlO5w93VsifsVzW2qgnrFNEl2Sb1VgFxWENivi8AcF7jf8U6YQJIeehHvI8v3L4zBTGCHVADlQ
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
