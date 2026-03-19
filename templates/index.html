@@ -13,61 +13,43 @@ TELEGRAM_BOT_TOKEN = "तुमचा_बॉट_टोकन"
 TELEGRAM_CHAT_ID = "तुमचा_चॅट_आयडी"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
+signals = []
 
-# सिग्नल्स साठवण्यासाठी लिस्ट
-signals_history = []
-
-def send_telegram_msg(message):
+def send_telegram(msg):
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={message}"
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={msg}"
         requests.get(url)
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+    except:
+        pass
 
 @app.route('/')
 def index():
-    status = "Searching..."
-    current_signal = None
-    
     try:
-        # १ मिनिटाच्या कँडलचा डेटा घेणे (Crude Oil मार्च फ्युचर - Security ID: 420844)
-        # टीप: धन API वरून चार्ट डेटा घेण्यासाठी तुमची परवानगी आवश्यक असते
-        hist_data = dhan.historical_minute_charts(420844, 'MCX', 'INTRA')
-
-        if hist_data and 'data' in hist_data:
-            candles = hist_data['data'] # शेवटच्या काही मेणबत्त्या
+        # Crude Oil March Fut (Security ID अंदाजे 420844 असते, एकदा चेक करा)
+        data = dhan.historical_minute_charts(420844, 'MCX', 'INTRA')
+        
+        if data and 'data' in data:
+            candles = data['data']
             if len(candles) >= 2:
-                prev_c = candles[-2] # आदल्या वेळची कँडल (लाल असावी)
-                curr_c = candles[-1] # आताची कँडल (हिरवी असावी)
-
-                # कँडलची माहिती (Open, High, Low, Close)
-                p_open, p_close = prev_c['open'], prev_c['close']
-                c_open, c_close = curr_c['open'], curr_c['close']
-
-                # अट: १. पहिली लाल पाहिजे (Open > Close) 
-                # २. दुसरी हिरवी पाहिजे (Close > Open)
-                # ३. हिरव्या कँडलची बॉडी लालच्या वर क्लोज झाली पाहिजे
-                if p_open > p_close and c_close > c_open:
-                    if c_close > p_open: # कँडल बॉडी ब्रेकआऊट
-                        now = datetime.now().strftime("%H:%M:%S")
-                        msg = f"🚀 CRUDE OIL BUY SIGNAL!\nPrice: {c_close}\nTime: {now}"
+                prev = candles[-2] # मागील कँडल
+                curr = candles[-1] # आताची कँडल
+                
+                # अट: लाल कँडल (p_open > p_close) आणि हिरवी कँडल (c_close > c_open)
+                # आणि हिरव्या कँडलची बॉडी लाल कँडलच्या वर क्लोज झाली पाहिजे
+                if prev['open'] > prev['close'] and curr['close'] > curr['open']:
+                    if curr['close'] > prev['open']:
+                        time_now = datetime.now().strftime("%H:%M:%S")
+                        msg = f"🚀 CRUDE OIL BREAKOUT!\nPrice: {curr['close']}\nTime: {time_now}"
                         
-                        # जर नवीन सिग्नल असेल तरच पाठवा (Duplicate टाळण्यासाठी)
-                        if not signals_history or signals_history[0]['t'] != now:
-                            send_telegram_msg(msg)
-                            current_signal = {'t': now, 's': 'CRUDE OIL', 'type': 'BUY', 'p': c_close}
-                            signals_history.insert(0, current_signal)
+                        # डुप्लिकेट मेसेज टाळण्यासाठी तपासणी
+                        if not signals or signals[0]['t'] != time_now:
+                            send_telegram(msg)
+                            signals.insert(0, {'t': time_now, 's': 'CRUDE OIL', 'type': 'BUY', 'p': curr['close']})
 
-        status = "Market Live"
+        return render_template('index.html', stocks=signals[:10], market_open=True)
+    
     except Exception as e:
-        status = f"Error: {str(e)}"
-
-    return render_template('index.html', 
-                           stocks=signals_history[:5], 
-                           history=signals_history,
-                           market_open=True,
-                           date=datetime.now().strftime("%d %b %Y"),
-                           time=datetime.now().strftime("%H:%M:%S"))
+        return f"कनेक्शन एरर: {str(e)}. कृपया तुमचा टोकन आणि इंटरनेट तपासा."
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
