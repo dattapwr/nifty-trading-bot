@@ -1,8 +1,5 @@
 flask
 dhanhq
-pytz
-requests
-apscheduler
-gunicorn
 pandas
-numpy
+requests
+gunicorn
