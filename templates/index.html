@@ -1,21 +1,124 @@
 <!DOCTYPE html>
-<html>
+<html lang="mr">
 <head>
-    <title>Dhan F&O Scanner</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dhan AI Scanner</title>
     <style>
-        body { background: #0b0e11; color: white; font-family: 'Arial'; text-align: center; padding-top: 50px; }
-        .box { border: 3px solid #f6465d; display: inline-block; padding: 40px; border-radius: 20px; background: #1e2329; min-width: 300px; }
-        .stock-name { font-size: 30px; color: #848e9c; }
-        .price { font-size: 60px; color: #f6465d; margin: 10px; }
-        .status { font-size: 18px; color: #848e9c; margin-top: 15px; }
+        /* बेस डिझाइन */
+        body { 
+            background: #0b0e11; 
+            color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            transition: background 0.5s ease;
+        }
+
+        /* सिग्नलनुसार बॅकग्राउंड कलर्स */
+        body.buy { background: #0c3d2e; } /* गडद हिरवा */
+        body.sell { background: #3d0c11; } /* गडद लाल */
+
+        .container {
+            text-align: center;
+            padding: 50px;
+            border-radius: 30px;
+            background: rgba(30, 35, 41, 0.9);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid #2b2f36;
+            min-width: 320px;
+        }
+
+        .stock-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #848e9c;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .price {
+            font-size: 72px;
+            font-weight: 800;
+            margin: 20px 0;
+        }
+
+        /* किमतीचे रंग */
+        .buy .price { color: #2ebd85; }
+        .sell .price { color: #f6465d; }
+        .scanning .price { color: #f0b90b; }
+
+        .badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .buy .badge { background: #2ebd85; color: black; }
+        .sell .badge { background: #f6465d; color: white; }
+        .scanning .badge { background: #2b2f36; color: #848e9c; }
+
+        .footer-info {
+            font-size: 14px;
+            color: #848e9c;
+            margin-top: 30px;
+            border-top: 1px solid #2b2f36;
+            padding-top: 15px;
+        }
+
+        .live-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #f0b90b;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
-<body>
-    <div class="box">
+<body class="{{ side|lower if side else 'scanning' }}">
+
+    <div class="container">
+        <div class="badge">
+            {% if side == 'BUY' %} 🚀 BUY SIGNAL 
+            {% elif side == 'SELL' %} 🎯 SELL SIGNAL 
+            {% else %} 🔍 SCANNING MODE {% endif %}
+        </div>
+
         <div class="stock-name">{{ stock }}</div>
-        <div class="price">₹{{ price }}</div>
-        <div class="status">Last Signal: {{ time }} | Status: Scanning...</div>
+        
+        <div class="price">
+            {% if price == 'Waiting' %}
+                <span style="font-size: 40px;">प्रतीक्षा करा...</span>
+            {% else %}
+                ₹{{ price }}
+            {% endif %}
+        </div>
+
+        <div class="footer-info">
+            <span class="live-dot"></span>
+            वेळ: {{ time }} | १८०+ स्टॉक्स लाईव्ह
+        </div>
     </div>
-    <script>setTimeout(function(){ location.reload(); }, 30000);</script>
+
+    <script>
+        // दर ३० सेकंदाला पेज ऑटो रिफ्रेश होईल
+        setTimeout(function(){
+            location.reload();
+        }, 30000);
+    </script>
 </body>
 </html>
