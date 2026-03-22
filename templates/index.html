@@ -1,20 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX Scanner</title>
+    <title>Dhan F&O Scanner</title>
     <style>
         body { background: #0b0e11; color: white; font-family: 'Arial'; text-align: center; padding-top: 50px; }
-        .box { border: 3px solid #2ebd85; display: inline-block; padding: 40px; border-radius: 20px; background: #1e2329; }
-        .price { font-size: 80px; color: #2ebd85; margin: 10px; }
-        .status { font-size: 20px; color: #848e9c; }
+        .box { border: 3px solid #f6465d; display: inline-block; padding: 40px; border-radius: 20px; background: #1e2329; min-width: 300px; }
+        .stock-name { font-size: 30px; color: #848e9c; }
+        .price { font-size: 60px; color: #f6465d; margin: 10px; }
+        .status { font-size: 18px; color: #848e9c; margin-top: 15px; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h2>CRUDE OIL MAR FUT</h2>
+        <div class="stock-name">{{ stock }}</div>
         <div class="price">₹{{ price }}</div>
-        <div class="status">Status: {{ signal }} | Last Update: {{ time }}</div>
+        <div class="status">Last Signal: {{ time }} | Status: Scanning...</div>
     </div>
-    <script>setTimeout(function(){ location.reload(); }, 60000);</script>
+    <script>setTimeout(function(){ location.reload(); }, 30000);</script>
 </body>
 </html>
