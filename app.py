@@ -17,8 +17,9 @@ TELEGRAM_CHAT_ID = "799650120"
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 COMMODITIES = {'CRUDEOIL': 25145, 'NATURALGAS': 25147}
 
-# स्टेटस ट्रॅक करण्यासाठी (Yes / No / No Data)
+# डेटा ट्रॅकिंग
 data_status = {'CRUDEOIL': 'Waiting...', 'NATURALGAS': 'Waiting...'}
+status_log = [] # डॅशबोर्डवर दिवसभराचा इतिहास दाखवण्यासाठी
 latest_signals_list = []
 
 def send_telegram(msg):
@@ -28,42 +29,65 @@ def send_telegram(msg):
     except: pass
 
 def scanner():
-    global latest_signals_list, data_status
-    send_telegram("🚀 *MCX १५ मिनिट बॉट (Status: No Data Option) सुरू झाला!*")
+    global latest_signals_list, data_status, status_log
+    send_telegram("🚀 *MCX लॉगिंग बॉट सुरू झाला!* \nआता तुम्हाला प्रत्येक १५ मिनिटांचा रिपोर्ट मिळेल.")
+    
+    last_logged_minute = -1
     
     while True:
         now = datetime.now()
-        # MCX मार्केट वेळ
+        current_time_str = now.strftime('%H:%M')
+
+        # मार्केट वेळ (MCX)
         if (9, 0) <= (now.hour, now.minute) <= (23, 30):
+            # प्रत्येक १५ मिनिटाला लॉग अपडेट करा (उदा. १०:००, १०:१५...)
+            if now.minute % 15 == 0 and now.minute != last_logged_minute:
+                log_entry = {"time": current_time_str, "crude": "Checking...", "ng": "Checking..."}
+                
+                telegram_report = f"📊 *MCX Report ({current_time_str}):*\n"
+                
+                for name, s_id in COMMODITIES.items():
+                    try:
+                        resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
+                        if resp and resp.get('status') == 'success':
+                            res_data = resp.get('data')
+                            status = "Yes" if (res_data and len(res_data) >= 2) else "No Data"
+                        else:
+                            status = "No"
+                    except:
+                        status = "Error"
+                    
+                    data_status[name] = status
+                    if name == 'CRUDEOIL': log_entry["crude"] = status
+                    else: log_entry["ng"] = status
+                    telegram_report += f"• {name}: {status}\n"
+                
+                # लॉग लिस्टमध्ये नवीन एंट्री वरती टाका
+                status_log.insert(0, log_entry)
+                status_log = status_log[:20] # फक्त शेवटच्या २० वेळा दाखवा
+                
+                send_telegram(telegram_report)
+                last_logged_minute = now.minute
+
+            # सिग्नल स्कॅनिंग (सतत सुरू राहील)
             for name, s_id in COMMODITIES.items():
                 try:
-                    # १५ मिनिटांचा डेटा मागवत आहे
-                    resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15') 
-                    
+                    resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
                     if resp and resp.get('status') == 'success':
                         data = resp.get('data')
                         if data and len(data) >= 2:
-                            data_status[name] = "Yes"
                             prev, curr = data[-2], data[-1]
-                            
-                            # Body-to-Body Sell Logic (Red close < Green open)
+                            # Body Breakout Logic
                             if prev['close'] > prev['open'] and curr['close'] < curr['open']:
                                 if curr['close'] < prev['open']:
-                                    sig_msg = f"🎯 *15-MIN SELL:* {name} | Price: {curr['close']} | Time: {now.strftime('%H:%M:%S')}"
+                                    sig_msg = f"🎯 *SELL:* {name} | Price: {curr['close']} | Time: {now.strftime('%H:%M:%S')}"
                                     if sig_msg not in latest_signals_list:
                                         latest_signals_list.insert(0, sig_msg)
                                         latest_signals_list = latest_signals_list[:5]
                                         send_telegram(sig_msg)
-                        else:
-                            data_status[name] = "No Data" # डेटा रिकामा आहे
-                    else:
-                        data_status[name] = "No" # प्रतिसाद मिळाला पण एरर आहे
-                except Exception as e:
-                    data_status[name] = "No Data" # कनेक्शन किंवा इतर एरर
-                    continue
-                time.sleep(2)
+                except: continue
+                time.sleep(1)
         else:
-            # मार्केट बंद असताना स्टेटस
             for key in data_status: data_status[key] = "Market Closed"
             
         time.sleep(30)
@@ -72,56 +96,50 @@ HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX Live Monitor</title>
-    <meta http-equiv="refresh" content="15">
+    <title>MCX Day Log</title>
+    <meta http-equiv="refresh" content="30">
     <style>
-        body { font-family: 'Segoe UI', Arial; background-color: #0d1117; color: white; text-align: center; padding: 20px; }
-        .dashboard { max-width: 500px; margin: auto; background: #161b22; padding: 25px; border-radius: 15px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .status-table { width: 100%; margin: 20px 0; border-collapse: collapse; }
-        .status-table th, .status-table td { padding: 12px; border: 1px solid #30363d; text-align: center; }
-        .yes { color: #3fb950; font-weight: bold; }
-        .no { color: #f85149; font-weight: bold; }
-        .no-data { color: #e3b341; font-weight: bold; }
-        .signal-box { background: #d9534f; color: white; padding: 12px; margin: 8px 0; border-radius: 8px; text-align: left; font-size: 14px; border-left: 5px solid #fff; }
-        h2 { color: #58a6ff; margin-bottom: 5px; }
-        p.info { font-size: 12px; color: #8b949e; margin-bottom: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #0d1117; color: white; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        .card { background: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border: 1px solid #30363d; text-align: center; font-size: 14px; }
+        th { background: #21262d; color: #58a6ff; }
+        .yes { color: #3fb950; }
+        .no { color: #f85149; }
+        .no-data { color: #e3b341; }
+        .signal { background: #d9534f; padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 13px; }
     </style>
 </head>
 <body>
-    <div class="dashboard">
-        <h2>📊 MCX Live Monitor</h2>
-        <p class="info">Timeframe: 15 Minutes | Auto-refresh: 15s</p>
-        
-        <table class="status-table">
-            <thead>
-                <tr><th>Symbol</th><th>Dhan Status</th></tr>
-            </thead>
-            <tbody>
+    <div class="container">
+        <div class="card">
+            <h2>📊 Live Status Log</h2>
+            <p style="color: #8b949e; font-size: 12px;">येथे दर १५ मिनिटांची हिस्ट्री दिसेल</p>
+            <table>
                 <tr>
-                    <td>CRUDE OIL</td>
-                    <td class="{{ 'yes' if status['CRUDEOIL']=='Yes' else ('no-data' if status['CRUDEOIL']=='No Data' else 'no') }}">
-                        {{ status['CRUDEOIL'] }}
-                    </td>
+                    <th>Time</th>
+                    <th>Crude Oil</th>
+                    <th>Natural Gas</th>
                 </tr>
+                {% for entry in logs %}
                 <tr>
-                    <td>NATURAL GAS</td>
-                    <td class="{{ 'yes' if status['NATURALGAS']=='Yes' else ('no-data' if status['NATURALGAS']=='No Data' else 'no') }}">
-                        {{ status['NATURALGAS'] }}
-                    </td>
+                    <td>{{ entry.time }}</td>
+                    <td class="{{ 'yes' if entry.crude=='Yes' else ('no-data' if entry.crude=='No Data' else 'no') }}">{{ entry.crude }}</td>
+                    <td class="{{ 'yes' if entry.ng=='Yes' else ('no-data' if entry.ng=='No Data' else 'no') }}">{{ entry.ng }}</td>
                 </tr>
-            </tbody>
-        </table>
+                {% endfor %}
+            </table>
+        </div>
 
-        <hr style="border: 0.1px solid #30363d; margin: 20px 0;">
-        
-        <h3>Latest 15-Min Signals</h3>
-        {% if signals %}
+        <div class="card">
+            <h3>🎯 Latest Signals</h3>
             {% for s in signals %}
-                <div class="signal-box">{{ s }}</div>
+                <div class="signal">{{ s }}</div>
+            {% else %}
+                <p style="color: #8b949e;">No active signals.</p>
             {% endfor %}
-        {% else %}
-            <p style="color: #8b949e; font-style: italic;">स्कॅनिंग सुरू आहे, सिग्नलची प्रतीक्षा करा...</p>
-        {% endif %}
+        </div>
     </div>
 </body>
 </html>
@@ -129,7 +147,7 @@ HTML_PAGE = """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE, status=data_status, signals=latest_signals_list)
+    return render_template_string(HTML_PAGE, logs=status_log, signals=latest_signals_list)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
