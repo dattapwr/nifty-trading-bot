@@ -15,11 +15,12 @@ TELEGRAM_TOKEN = "8581468481:AAGSx4vbYZ2Ygq_slm3PDpZBUzlcpWHsiAk"
 TELEGRAM_CHAT_ID = "799650120"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
+
+# एप्रिल एक्सपायरीसाठी नवीन IDs (कृपया हे मार्केट सुरू झाल्यावर एकदा तपासा)
 COMMODITIES = {'CRUDEOIL': 25145, 'NATURALGAS': 25147}
 
-# डेटा आणि लॉग मॅनेजमेंट
 data_status = {'CRUDEOIL': 'Waiting...', 'NATURALGAS': 'Waiting...'}
-status_log = [] # येथे १५ मिनिटांचा इतिहास साठवला जाईल
+status_log = [] 
 latest_signals_list = []
 
 def send_telegram(msg):
@@ -36,19 +37,19 @@ def scanner():
     
     while True:
         now = datetime.now()
+        # दर १५ मिनिटांचा टप्पा (00, 15, 30, 45)
         current_minute_slot = (now.minute // 15) * 15
         time_label = now.replace(minute=current_minute_slot, second=0).strftime('%H:%M')
 
-        # मार्केट वेळेत स्कॅनिंग (9 AM to 11:30 PM)
+        # मार्केट वेळ (MCX: 9 AM to 11:30 PM)
         if (9, 0) <= (now.hour, now.minute) <= (23, 30):
-            
-            # दर १५ मिनिटांनी लॉगमध्ये नवीन एंट्री करण्यासाठी
             if time_label != last_check_time:
                 current_entry = {"time": time_label, "crude": "Waiting...", "ng": "Waiting..."}
                 telegram_rep = f"📊 *MCX Report ({time_label}):*\n"
                 
                 for name, s_id in COMMODITIES.items():
                     try:
+                        # १५ मिनिटांचा डेटा
                         resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
                         if resp and resp.get('status') == 'success':
                             res_data = resp.get('data')
@@ -63,14 +64,12 @@ def scanner():
                     else: current_entry["ng"] = status
                     telegram_rep += f"• {name}: {status}\n"
 
-                # लिस्टमध्ये सर्वात वर नवीन वेळ टाका
                 status_log.insert(0, current_entry)
-                status_log = status_log[:15] # फक्त मागील १५ नोंदी ठेवा
-                
+                status_log = status_log[:15]
                 send_telegram(telegram_rep)
                 last_check_time = time_label
 
-            # सतत सिग्नल स्कॅनिंग
+            # सिग्नल स्कॅनिंग
             for name, s_id in COMMODITIES.items():
                 try:
                     resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
@@ -78,7 +77,7 @@ def scanner():
                         data = resp.get('data')
                         if data and len(data) >= 2:
                             prev, curr = data[-2], data[-1]
-                            # Body breakout logic (No wick involvement)
+                            # Body breakout logic
                             if prev['close'] > prev['open'] and curr['close'] < curr['open']:
                                 if curr['close'] < prev['open']:
                                     sig = f"🎯 *SELL:* {name} | Price: {curr['close']} | Time: {now.strftime('%H:%M:%S')}"
@@ -89,7 +88,9 @@ def scanner():
                 except: continue
                 time.sleep(1)
         else:
-            for k in data_status: data_status[k] = "Market Closed"
+            # मार्केट बंद असतानाचा स्टेटस
+            data_status['CRUDEOIL'] = "Market Closed"
+            data_status['NATURALGAS'] = "Market Closed"
             
         time.sleep(30)
 
@@ -97,7 +98,7 @@ HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX Live Status</title>
+    <title>MCX Live Monitor</title>
     <meta http-equiv="refresh" content="30">
     <style>
         body { font-family: sans-serif; background-color: #0d1117; color: white; padding: 20px; }
@@ -125,6 +126,8 @@ HTML_PAGE = """
                 <td class="{{ 'yes' if entry.crude=='Yes' else ('no-data' if entry.crude=='No Data' else 'no') }}">{{ entry.crude }}</td>
                 <td class="{{ 'yes' if entry.ng=='Yes' else ('no-data' if entry.ng=='No Data' else 'no') }}">{{ entry.ng }}</td>
             </tr>
+            {% else %}
+            <tr><td colspan="3">स्कॅनिंग सुरू होण्याची प्रतीक्षा करा (दर १५ मिनिटांनी अपडेट होईल)</td></tr>
             {% endfor %}
         </table>
         <hr style="border: 0.1px solid #333; margin: 20px 0;">
@@ -132,7 +135,7 @@ HTML_PAGE = """
         {% for s in signals %}
             <div class="sig">{{ s }}</div>
         {% else %}
-            <p style="color: #8b949e;">No active signals found.</p>
+            <p style="color: #8b949e;">सध्या कोणताही सेल सिग्नल नाही.</p>
         {% endfor %}
     </div>
 </body>
