@@ -17,38 +17,32 @@ TELEGRAM_CHAT_ID = "799650120"
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 latest_signal = {"stock": "SCANNING", "price": "Waiting", "side": "NONE", "time": "Live"}
 
-# १८०+ NSE स्टॉक्सची यादी
+# १८०+ NSE स्टॉक्सची यादी (Security IDs)
 STOCKS = {
     'ACC': 22, 'ADANIENT': 25, 'ADANIPORTS': 15083, 'AMBUJACEM': 1270, 'ASHOKLEY': 212,
     'ASIANPAINT': 236, 'AXISBANK': 5900, 'BAJAJ-AUTO': 16669, 'BAJFINANCE': 317, 
     'BANKBARODA': 4668, 'BHARTIARTL': 10604, 'HDFCBANK': 1333, 'ICICIBANK': 4963, 
-    'INFY': 1594, 'ITC': 1660, 'RELIANCE': 2885, 'SBIN': 3045, 'TCS': 11536
-    # (तुमच्या १८० स्टॉक्सची पूर्ण यादी इथे ठेवा)
+    'INFY': 1594, 'ITC': 1660, 'RELIANCE': 2885, 'SBIN': 3045, 'TCS': 11536,
+    'TATAMOTORS': 3456, 'WIPRO': 3787, 'JSWSTEEL': 11723, 'LT': 11483, 'PNB': 10666,
+    'VEDL': 3063, 'DLF': 14732, 'CANBK': 10791, 'TATASTEEL': 3499, 'BPCL': 526
+    # (इतर १८० स्टॉक्सची यादी मागे दिली आहे तशीच जोडा)
 }
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={msg}&parse_mode=Markdown"
-    try: requests.get(url, timeout=5)
+    try: 
+        requests.get(url, timeout=5)
     except: pass
-
-def get_prev_close(s_id):
-    try:
-        now = datetime.now()
-        start = (now - timedelta(days=5)).strftime('%Y-%m-%d')
-        end = now.strftime('%Y-%m-%d')
-        resp = dhan.historical_daily_charts(s_id, 'NSE_EQ', 'EQUITY', start, end)
-        return resp['data']['close'][-2] if resp['status'] == 'success' else None
-    except: return None
 
 def scanner_loop():
     global latest_signal
-    # बॉट सुरू झाल्यावर लगेच एक टेस्ट मेसेज
-    send_telegram("🚀 *स्कॅनर सुरू झाला आहे!* \nआता आदल्या दिवशीचा फिल्टर काढला आहे. मेसेज येण्याची वाट पाहत आहे...")
+    # सर्व्हिस सुरू झाल्याचा पहिला मेसेज (टेस्टिंगसाठी)
+    send_telegram("🚀 *अल्गो स्कॅनर आता पूर्णपणे सुरू झाला आहे!* \n९:३० आणि गॅप या सर्व अटी काढल्या आहेत. \nआता ९:१५ पासून मेसेज येतील.")
     
     while True:
         now = datetime.now()
-        # सकाळी ९:३० नंतर स्कॅनिंग सुरू
-        if now.weekday() < 5 and (9, 30) <= (now.hour, now.minute) <= (15, 30):
+        # सोमवार ते शुक्रवार, ९:१५ ते ३:३० (मार्केटची संपूर्ण वेळ)
+        if now.weekday() < 5 and (9, 15) <= (now.hour, now.minute) <= (15, 30):
             for name, s_id in STOCKS.items():
                 try:
                     resp = dhan.historical_minute_charts(s_id, 'NSE_EQ', 'INTRA')
@@ -56,39 +50,30 @@ def scanner_loop():
                         data = resp['data']
                         if len(data) < 2: continue
 
-                        p_close = get_prev_close(s_id)
-                        if not p_close: continue
-                        
-                        # गॅप फिल्टर: २% (मेसेज लवकर येण्यासाठी ५% वरून २% केला आहे)
-                        gap_pct = abs((data[0]['open'] - p_close) / p_close) * 100
-                        if gap_pct < 2.0: continue 
+                        # मागील ५ मिनिटांची कॅन्डल (Setup) आणि चालू कॅन्डल (Signal)
+                        prev = data[-2]
+                        curr = data[-1]
 
-                        prev = data[-2] # सेटअप: कोणतीही ग्रीन कॅन्डल
-                        curr = data[-1] # सिग्नल: रेड कॅन्डल जिने लो तोडला
-
-                        # अट: ग्रीन कॅन्डलचा लो रेड कॅन्डलने तोडला पाहिजे
+                        # अट: १. मागील हिरवी (Green) २. चालू लाल (Red) ३. लाल ने हिरवीचा 'Low' तोडला
                         if prev['close'] > prev['open'] and curr['close'] < curr['open']:
                             if curr['close'] < prev['low']:
                                 entry = curr['close']
-                                sl = round(prev['high'] * 1.0015, 2) # ०.१५% बफर
-                                risk = sl - entry
-                                tgt = round(entry - (risk * 2), 2)
+                                sl = round(prev['high'] * 1.0015, 2) # ०.१५% बफर SL
+                                tgt = round(entry - ((sl - entry) * 2), 2) # १:२ Target
                                 
-                                msg = (f"🎯 *NEW SELL SIGNAL*\n"
+                                msg = (f"🎯 *SELL SIGNAL (No Restrictions)*\n\n"
                                        f"*Stock:* {name}\n"
-                                       f"*Gap:* {round(gap_pct, 2)}%\n"
                                        f"*Entry:* {entry}\n"
                                        f"*SL:* {sl}\n"
                                        f"*TGT:* {tgt}\n"
-                                       f"*Time:* {now.strftime('%H:%M')}")
+                                       f"*Time:* {now.strftime('%H:%M:%S')}")
                                 
                                 send_telegram(msg)
                                 latest_signal = {"stock": name, "price": entry, "side": "SELL", "time": now.strftime('%H:%M')}
-                                time.sleep(1) # एकाच वेळी अनेक मेसेज टाळण्यासाठी
                                 
-                    time.sleep(0.3) # API दर मर्यादेसाठी
+                    time.sleep(0.2) # १८० स्टॉक्स वेगाने स्कॅन करण्यासाठी
                 except: continue
-        time.sleep(30) # दर ३० सेकंदाला पुन्हा तपासणे
+        time.sleep(30)
 
 @app.route('/')
 def index():
