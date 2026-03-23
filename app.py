@@ -2,68 +2,59 @@ import os
 import requests
 import time
 from datetime import datetime
-from flask import Flask
 from dhanhq import dhanhq
 from threading import Thread
+from flask import Flask
 
 app = Flask(__name__)
 
-# --- तुमची माहिती ---
+# १. तुमची माहिती भरा
 CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MjcxOTQ3LCJpYXQiOjE3NzQxODU1NDcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.kVtUEVvjiwCp9vG5oSYT4VJNN1anucqZJH17Z2AjxG1mCoFYrHlmNxffnaTdWMcGRsJWnPtOI-WT5Z5lqPQ7sw" 
+ACCESS_TOKEN = "तुमचा_नवीन_टोकन_इथे_टाका" 
 TELEGRAM_TOKEN = "8581468481:AAGSx4vbYZ2Ygq_slm3PDpZBUzlcpWHsiAk"
 TELEGRAM_CHAT_ID = "799650120"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
-# प्रमुख १८० स्टॉक्सचे नमुने (यादी पूर्ण ठेवा)
-STOCKS = {'RELIANCE': 2885, 'SBIN': 3045, 'HDFCBANK': 1333, 'ICICIBANK': 4963, 'TATAMOTORS': 3456}
+# २. आजचे ताजे आयडी
+COMMODITIES = {
+    'CRUDEOIL': 25145, 
+    'NATURALGAS': 25147
+}
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
-    except:
-        print("Telegram Send Failed")
+        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
+    except: pass
 
-def scanner_loop():
-    # १. सुरुवातीलाच एक मेसेज पाठवून खात्री करणे
-    send_telegram("🔄 *स्कॅनर सिस्टीम रीफ्रेश झाली आहे!* \nआता 'Green -> Red' सेटअप शोधत आहे...")
+def commodity_scanner():
+    send_telegram("🚀 *MCX बॉट आता लाईव्ह झाला आहे!* \nआजचे आयडी: CRUDE-25145, NG-25147")
     
     while True:
-        try:
-            now = datetime.now()
-            # मार्केट वेळ: ९:१५ ते ३:३०
-            if now.weekday() < 5 and (9, 15) <= (now.hour, now.minute) <= (15, 30):
-                for name, s_id in STOCKS.items():
-                    resp = dhan.historical_minute_charts(s_id, 'NSE_EQ', 'INTRA')
-                    
+        now = datetime.now()
+        # रात्री ११:३० पर्यंत स्कॅनिंग सुरू राहील
+        if (9, 0) <= (now.hour, now.minute) <= (23, 30):
+            for name, s_id in COMMODITIES.items():
+                try:
+                    resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA')
                     if resp and resp.get('status') == 'success':
                         data = resp.get('data')
-                        if data and len(data) >= 2:
+                        if len(data) >= 2:
                             prev, curr = data[-2], data[-1]
-                            
-                            # तुमची शुद्ध अट: Green -> Red Breakdown
+                            # अट: Green -> Red Breakdown
                             if prev['close'] > prev['open'] and curr['close'] < curr['open']:
                                 if curr['close'] < prev['low']:
-                                    msg = f"🎯 *SELL:* {name}\nPrice: {curr['close']}\nTime: {now.strftime('%H:%M')}"
+                                    msg = f"🎯 *MCX SELL SIGNAL*\n\n*Stock:* {name}\n*Price:* {curr['close']}\n*Time:* {now.strftime('%H:%M')}"
                                     send_telegram(msg)
-                    
-                    time.sleep(0.4) # API Rate Limit वाचवण्यासाठी
-            else:
-                print("Market is Closed")
-                time.sleep(60)
-        except Exception as e:
-            # जर काही एरर आला तर तो टेलिग्रामवर कळेल
-            send_telegram(f"⚠️ *System Alert:* {str(e)}")
-            time.sleep(10)
+                except: continue
+                time.sleep(1)
         time.sleep(30)
 
 @app.route('/')
-def home():
-    return "Scanner is LIVE and Running!", 200
+def health(): return "Scanner is Active!", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    Thread(target=scanner_loop).start()
+    Thread(target=commodity_scanner).start()
     app.run(host='0.0.0.0', port=port)
