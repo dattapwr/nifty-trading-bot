@@ -8,7 +8,7 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# --- तुमची माहिती (मी आधीच भरली आहे) ---
+# --- तुमची माहिती ---
 CLIENT_ID = "1105760761"
 ACCESS_TOKEN = "EyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MzY1MTg4LCJpYXQiOjE3NzQyNzg3ODgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.MYos_aoKx0Asovh4abb8mf-uiD7mNfY_-bVaq1YWNvJRpYrI_UBhJhZreE4TZ5uFgBZ_EmYLJ7avrDRbBeztAA"
 TELEGRAM_TOKEN = "8581468481:AAGSx4vbYZ2Ygq_slm3PDpZBUzlcpWHsiAk"
@@ -17,9 +17,7 @@ TELEGRAM_CHAT_ID = "799650120"
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 COMMODITIES = {'CRUDEOIL': 25145, 'NATURALGAS': 25147}
 
-# वेबसाईटवर दाखवण्यासाठी ग्लोबल व्हेरिएबल
-latest_signal = "सध्या कोणताही सिग्नल नाही. स्कॅनिंग सुरू आहे..."
-last_update_time = "-"
+latest_signals_list = []
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -28,12 +26,11 @@ def send_telegram(msg):
     except: pass
 
 def scanner():
-    global latest_signal, last_update_time
-    send_telegram("🚀 *MCX बॉट सुरू झाला!* \nवेबसाईट आणि टेलिग्राम दोन्हीवर सिग्नल मिळतील.")
+    global latest_signals_list
+    send_telegram("🚀 *MCX नवीन बॉडी-ब्रेकआउट स्ट्रॅटेजी सुरू झाली!*")
     
     while True:
         now = datetime.now()
-        # मार्केट वेळ: सकाळी ९ ते रात्री ११:३०
         if (9, 0) <= (now.hour, now.minute) <= (23, 30):
             for name, s_id in COMMODITIES.items():
                 try:
@@ -41,38 +38,54 @@ def scanner():
                     if resp and resp.get('status') == 'success':
                         data = resp.get('data')
                         if len(data) >= 2:
-                            prev, curr = data[-2], data[-1]
-                            # Sell स्ट्रेटेजी
-                            if prev['close'] > prev['open'] and curr['close'] < curr['open'] and curr['close'] < prev['low']:
-                                last_update_time = now.strftime('%H:%M:%S')
-                                latest_signal = f"🎯 SELL: {name} | किंमत: {curr['close']} | वेळ: {last_update_time}"
-                                send_telegram(latest_signal)
+                            prev = data[-2]  # पहिली कॅंडल
+                            curr = data[-1]  # दुसरी (चालू) कॅंडल
+                            
+                            # १. पहिली कॅंडल हिरवी पाहिजे (Close > Open)
+                            is_prev_green = prev['close'] > prev['open']
+                            
+                            # २. दुसरी कॅंडल लाल पाहिजे (Close < Open)
+                            is_curr_red = curr['close'] < curr['open']
+                            
+                            # ३. लाल बॉडी हिरव्या बॉडीच्या खाली पाहिजे (वीकचा संबंध नाही)
+                            # Red Close < Green Open
+                            if is_prev_green and is_curr_red:
+                                if curr['close'] < prev['open']:
+                                    sig_msg = f"🎯 *SELL:* {name} \n💰 किंमत: {curr['close']} \n⏰ वेळ: {now.strftime('%H:%M:%S')}"
+                                    if sig_msg not in latest_signals_list:
+                                        latest_signals_list.insert(0, sig_msg)
+                                        latest_signals_list = latest_signals_list[:10]
+                                        send_telegram(sig_msg)
                 except: continue
-                time.sleep(2)
+                time.sleep(1)
         time.sleep(30)
 
-# वेबसाईटचे डिझाइन (HTML)
 HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX Live Scanner</title>
-    <meta http-equiv="refresh" content="30"> <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; text-align: center; padding: 50px; }
-        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); display: inline-block; }
-        .signal { font-size: 24px; color: #d9534f; font-weight: bold; margin: 20px 0; }
-        .status { color: #5cb85c; font-weight: bold; }
-        .footer { margin-top: 20px; font-size: 12px; color: #888; }
+    <title>MCX Body Breakout Dashboard</title>
+    <meta http-equiv="refresh" content="15">
+    <style>
+        body { font-family: sans-serif; background-color: #0d1117; color: white; text-align: center; padding: 20px; }
+        .dashboard { max-width: 500px; margin: auto; background: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; }
+        .signal-box { background: #d9534f; color: white; padding: 10px; margin: 10px 0; border-radius: 6px; font-weight: bold; text-align: left; }
+        .no-signal { color: #8b949e; margin-top: 20px; }
+        .header { color: #58a6ff; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📊 MCX Live Signal Dashboard</h1>
-        <p class="status">● System Live & Scanning</p>
-        <hr>
-        <div class="signal">{{ signal }}</div>
-        <p>शेवटचा अपडेट: {{ update_time }}</p>
-        <div class="footer">Client ID: 1105760761 | Crude Oil & Natural Gas</div>
+    <div class="dashboard">
+        <h2 class="header">📊 MCX Live Dashboard</h2>
+        <p style="color: #3fb950;">● Scanning: Crude Oil & Natural Gas</p>
+        <hr style="border: 0.1px solid #30363d;">
+        {% if signals %}
+            {% for s in signals %}
+                <div class="signal-box">{{ s }}</div>
+            {% endfor %}
+        {% else %}
+            <p class="no-signal">सध्या कोणताही 'Body Breakout' सिग्नल नाही...</p>
+        {% endif %}
     </div>
 </body>
 </html>
@@ -80,7 +93,7 @@ HTML_PAGE = """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE, signal=latest_signal, update_time=last_update_time)
+    return render_template_string(HTML_PAGE, signals=latest_signals_list)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
