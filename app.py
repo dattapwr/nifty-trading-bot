@@ -17,9 +17,9 @@ TELEGRAM_CHAT_ID = "799650120"
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 COMMODITIES = {'CRUDEOIL': 25145, 'NATURALGAS': 25147}
 
-# डेटा ट्रॅकिंग
+# डेटा आणि लॉग मॅनेजमेंट
 data_status = {'CRUDEOIL': 'Waiting...', 'NATURALGAS': 'Waiting...'}
-status_log = [] # डॅशबोर्डवर दिवसभराचा इतिहास दाखवण्यासाठी
+status_log = [] # येथे १५ मिनिटांचा इतिहास साठवला जाईल
 latest_signals_list = []
 
 def send_telegram(msg):
@@ -30,21 +30,22 @@ def send_telegram(msg):
 
 def scanner():
     global latest_signals_list, data_status, status_log
-    send_telegram("🚀 *MCX लॉगिंग बॉट सुरू झाला!* \nआता तुम्हाला प्रत्येक १५ मिनिटांचा रिपोर्ट मिळेल.")
+    send_telegram("🚀 *MCX १५-मिनिट लॉगिंग सिस्टीम सक्रिय!*")
     
-    last_logged_minute = -1
+    last_check_time = ""
     
     while True:
         now = datetime.now()
-        current_time_str = now.strftime('%H:%M')
+        current_minute_slot = (now.minute // 15) * 15
+        time_label = now.replace(minute=current_minute_slot, second=0).strftime('%H:%M')
 
-        # मार्केट वेळ (MCX)
+        # मार्केट वेळेत स्कॅनिंग (9 AM to 11:30 PM)
         if (9, 0) <= (now.hour, now.minute) <= (23, 30):
-            # प्रत्येक १५ मिनिटाला लॉग अपडेट करा (उदा. १०:००, १०:१५...)
-            if now.minute % 15 == 0 and now.minute != last_logged_minute:
-                log_entry = {"time": current_time_str, "crude": "Checking...", "ng": "Checking..."}
-                
-                telegram_report = f"📊 *MCX Report ({current_time_str}):*\n"
+            
+            # दर १५ मिनिटांनी लॉगमध्ये नवीन एंट्री करण्यासाठी
+            if time_label != last_check_time:
+                current_entry = {"time": time_label, "crude": "Waiting...", "ng": "Waiting..."}
+                telegram_rep = f"📊 *MCX Report ({time_label}):*\n"
                 
                 for name, s_id in COMMODITIES.items():
                     try:
@@ -58,18 +59,18 @@ def scanner():
                         status = "Error"
                     
                     data_status[name] = status
-                    if name == 'CRUDEOIL': log_entry["crude"] = status
-                    else: log_entry["ng"] = status
-                    telegram_report += f"• {name}: {status}\n"
-                
-                # लॉग लिस्टमध्ये नवीन एंट्री वरती टाका
-                status_log.insert(0, log_entry)
-                status_log = status_log[:20] # फक्त शेवटच्या २० वेळा दाखवा
-                
-                send_telegram(telegram_report)
-                last_logged_minute = now.minute
+                    if name == 'CRUDEOIL': current_entry["crude"] = status
+                    else: current_entry["ng"] = status
+                    telegram_rep += f"• {name}: {status}\n"
 
-            # सिग्नल स्कॅनिंग (सतत सुरू राहील)
+                # लिस्टमध्ये सर्वात वर नवीन वेळ टाका
+                status_log.insert(0, current_entry)
+                status_log = status_log[:15] # फक्त मागील १५ नोंदी ठेवा
+                
+                send_telegram(telegram_rep)
+                last_check_time = time_label
+
+            # सतत सिग्नल स्कॅनिंग
             for name, s_id in COMMODITIES.items():
                 try:
                     resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
@@ -77,18 +78,18 @@ def scanner():
                         data = resp.get('data')
                         if data and len(data) >= 2:
                             prev, curr = data[-2], data[-1]
-                            # Body Breakout Logic
+                            # Body breakout logic (No wick involvement)
                             if prev['close'] > prev['open'] and curr['close'] < curr['open']:
                                 if curr['close'] < prev['open']:
-                                    sig_msg = f"🎯 *SELL:* {name} | Price: {curr['close']} | Time: {now.strftime('%H:%M:%S')}"
-                                    if sig_msg not in latest_signals_list:
-                                        latest_signals_list.insert(0, sig_msg)
+                                    sig = f"🎯 *SELL:* {name} | Price: {curr['close']} | Time: {now.strftime('%H:%M:%S')}"
+                                    if sig not in latest_signals_list:
+                                        latest_signals_list.insert(0, sig)
                                         latest_signals_list = latest_signals_list[:5]
-                                        send_telegram(sig_msg)
+                                        send_telegram(sig)
                 except: continue
                 time.sleep(1)
         else:
-            for key in data_status: data_status[key] = "Market Closed"
+            for k in data_status: data_status[k] = "Market Closed"
             
         time.sleep(30)
 
@@ -96,50 +97,43 @@ HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX Day Log</title>
+    <title>MCX Live Status</title>
     <meta http-equiv="refresh" content="30">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #0d1117; color: white; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        .card { background: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; border: 1px solid #30363d; text-align: center; font-size: 14px; }
-        th { background: #21262d; color: #58a6ff; }
-        .yes { color: #3fb950; }
-        .no { color: #f85149; }
-        .no-data { color: #e3b341; }
-        .signal { background: #d9534f; padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 13px; }
+        body { font-family: sans-serif; background-color: #0d1117; color: white; padding: 20px; }
+        .box { max-width: 600px; margin: auto; background: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border: 1px solid #30363d; text-align: center; }
+        .yes { color: #3fb950; font-weight: bold; }
+        .no { color: #f85149; font-weight: bold; }
+        .no-data { color: #e3b341; font-weight: bold; }
+        .sig { background: #d9534f; padding: 10px; border-radius: 6px; margin-top: 5px; text-align: left; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h2>📊 Live Status Log</h2>
-            <p style="color: #8b949e; font-size: 12px;">येथे दर १५ मिनिटांची हिस्ट्री दिसेल</p>
-            <table>
-                <tr>
-                    <th>Time</th>
-                    <th>Crude Oil</th>
-                    <th>Natural Gas</th>
-                </tr>
-                {% for entry in logs %}
-                <tr>
-                    <td>{{ entry.time }}</td>
-                    <td class="{{ 'yes' if entry.crude=='Yes' else ('no-data' if entry.crude=='No Data' else 'no') }}">{{ entry.crude }}</td>
-                    <td class="{{ 'yes' if entry.ng=='Yes' else ('no-data' if entry.ng=='No Data' else 'no') }}">{{ entry.ng }}</td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-
-        <div class="card">
-            <h3>🎯 Latest Signals</h3>
-            {% for s in signals %}
-                <div class="signal">{{ s }}</div>
-            {% else %}
-                <p style="color: #8b949e;">No active signals.</p>
+    <div class="box">
+        <h3>📊 15-Min Status History</h3>
+        <table>
+            <tr style="background: #21262d;">
+                <th>Time Slot</th>
+                <th>Crude Oil</th>
+                <th>Natural Gas</th>
+            </tr>
+            {% for entry in logs %}
+            <tr>
+                <td>{{ entry.time }}</td>
+                <td class="{{ 'yes' if entry.crude=='Yes' else ('no-data' if entry.crude=='No Data' else 'no') }}">{{ entry.crude }}</td>
+                <td class="{{ 'yes' if entry.ng=='Yes' else ('no-data' if entry.ng=='No Data' else 'no') }}">{{ entry.ng }}</td>
+            </tr>
             {% endfor %}
-        </div>
+        </table>
+        <hr style="border: 0.1px solid #333; margin: 20px 0;">
+        <h3>🎯 Latest Signals</h3>
+        {% for s in signals %}
+            <div class="sig">{{ s }}</div>
+        {% else %}
+            <p style="color: #8b949e;">No active signals found.</p>
+        {% endfor %}
     </div>
 </body>
 </html>
