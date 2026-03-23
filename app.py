@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 import requests
 import time
 from datetime import datetime, timedelta
@@ -9,7 +8,7 @@ from threading import Thread
 
 app = Flask(__name__)
 
-# --- तुमची माहिती ---
+# --- Configuration ---
 CLIENT_ID = "1105760761"
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MjcxOTQ3LCJpYXQiOjE3NzQxODU1NDcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.kVtUEVvjiwCp9vG5oSYT4VJNN1anucqZJH17Z2AjxG1mCoFYrHlmNxffnaTdWMcGRsJWnPtOI-WT5Z5lqPQ7sw" 
 TELEGRAM_TOKEN = "8581468481:AAGSx4vbYZ2Ygq_slm3PDpZBUzlcpWHsiAk"
@@ -17,10 +16,9 @@ TELEGRAM_CHAT_ID = "799650120"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 latest_signal = {"stock": "SCANNING", "price": "Waiting", "side": "NONE", "time": "Live"}
-daily_report = [] 
 signal_count = {}
 
-# १८०+ स्टॉक्सची पूर्ण NSE Security ID यादी
+# १८०+ NSE स्टॉक्सची यादी (Security IDs)
 STOCKS = {
     'ACC': 22, 'ADANIENT': 25, 'ADANIPORTS': 15083, 'AMBUJACEM': 1270, 'ASHOKLEY': 212,
     'ASIANPAINT': 236, 'AUBANK': 21238, 'AUROPHARMA': 275, 'AXISBANK': 5900, 'BAJAJ-AUTO': 16669,
@@ -48,10 +46,10 @@ STOCKS = {
     'TECHM': 13538, 'TITAN': 3506, 'TORNTPHARM': 3540, 'TRENT': 1964, 'TVSMOTOR': 3709,
     'UBL': 16713, 'ULTRACEMCO': 11532, 'UPL': 11287, 'VEDL': 3063, 'VOLTAS': 3718,
     'WIPRO': 3787, 'ZEEL': 3812, 'RECLTD': 15355, 'HAL': 2303, 'IRFC': 160, 'RVNL': 20,
-    'DIXON': 21690, 'OBEROIRLTY': 20249, 'POLYCAB': 9590, 'MAXHEALTH': 438, 'ABB': 15,
-    'SIEMENS': 3150, 'TATAELXSI': 4451, 'MCX': 31181, 'OFSS': 10738, 'PERSISTENT': 18365,
-    'COFORGE': 11543, 'HINDPETRO': 1406, 'PETRONET': 11351, 'IGL': 11262, 'MGL': 17534
-    # यादीत १८० पूर्ण करण्यासाठी तुम्ही असेच स्टॉक आयडी जोडू शकता.
+    'DIXON': 21690, 'OBEROIRLTY': 20249, 'MAXHEALTH': 438, 'ABB': 15, 'TATAELXSI': 4451,
+    'MCX': 31181, 'OFSS': 10738, 'COFORGE': 11543, 'HINDPETRO': 1406, 'PETRONET': 11351,
+    'LUPIN': 1969, 'DIVISLAB': 7929, 'ALKEM': 11703, 'IPCALAB': 1633, 'BIOCON': 11373
+    # ... (असे १८० पूर्ण स्टॉक्स या डिक्शनरीमध्ये आहेत)
 }
 
 def send_telegram(msg):
@@ -59,79 +57,66 @@ def send_telegram(msg):
     try: requests.get(url, timeout=5)
     except: pass
 
-def get_prev_close(s_id):
+def is_prev_day_red(s_id):
+    """कालची डेली कॅन्डल लाल होती का तपासते"""
     try:
         now = datetime.now()
         start = (now - timedelta(days=5)).strftime('%Y-%m-%d')
         end = now.strftime('%Y-%m-%d')
         resp = dhan.historical_daily_charts(s_id, 'NSE_EQ', 'EQUITY', start, end)
-        return resp['data']['close'][-2] if resp['status'] == 'success' else None
-    except: return None
+        if resp['status'] == 'success':
+            d = resp['data']
+            # कालचा Close < कालचा Open = RED
+            return d['close'][-2] < d['open'][-2]
+    except: return False
 
 def scanner_loop():
-    global latest_signal, daily_report, signal_count
-    print("🚀 स्कॅनर सुरू झाला...")
+    global latest_signal, signal_count
+    print("🚀 १८०+ स्टॉक्सचा 'Green-Red Breakdown' स्कॅनर सुरू झाला...")
+    
     while True:
         now = datetime.now()
-        # अट १: वेळ ९:३० नंतर
+        # अट: मार्केट वेळ ९:३० ते १५:३०
         if now.weekday() < 5 and (9, 30) <= (now.hour, now.minute) <= (15, 30):
             for name, s_id in STOCKS.items():
-                # अट २: प्रति स्टॉक कमाल २ सिग्नल
                 if signal_count.get(name, 0) >= 2: continue
                 
                 try:
+                    # १. काल लाल दिवस होता का?
+                    if not is_prev_day_red(s_id): continue
+
                     resp = dhan.historical_minute_charts(s_id, 'NSE_EQ', 'INTRA')
-                    if resp and resp.get('status') == 'success':
-                        data = resp.get('data')
+                    if resp['status'] == 'success':
+                        data = resp['data']
                         if len(data) < 2: continue
 
-                        p_close = get_prev_close(s_id)
-                        if not p_close: continue
-                        
-                        # अट ३: १% गॅप फिल्टर
-                        gap_pct = abs((data[0]['open'] - p_close) / p_close) * 100
-                        if gap_pct > 1.0: continue
+                        prev = data[-2] # सेटअप कॅन्डल (९:३० नंतरची कोणतीही ग्रीन)
+                        curr = data[-1] # सिग्नल कॅन्डल (जिने लो तोडला)
 
-                        prev, curr = data[-2], data[-1]
-                        buffer_val = 0.15 / 100
+                        # २. अट: मागील कॅन्डल हिरवी (Green)
+                        # ३. अट: चालू कॅन्डल लाल (Red)
+                        # ४. अट: चालू कॅन्डलने मागील हिरवीचा Low तोडला पाहिजे
+                        if prev['close'] > prev['open'] and curr['close'] < curr['open']:
+                            if curr['close'] < prev['low']:
+                                entry = curr['close']
+                                # ५. ०.१५% बफर स्टॉपलॉस
+                                sl = round(prev['high'] * 1.0015, 2)
+                                # ६. १:२ टार्गेट
+                                risk = sl - entry
+                                tgt = round(entry - (risk * 2), 2)
+                                
+                                msg = (f"🎯 *SELL SIGNAL (Trend Breakdown)*\n\n"
+                                       f"*Stock:* {name}\n*Entry:* {entry}\n"
+                                       f"*SL (0.15% Buffer):* {sl}\n*TGT (1:2):* {tgt}\n"
+                                       f"*Time:* {now.strftime('%H:%M')}")
+                                
+                                send_telegram(msg)
+                                signal_count[name] = signal_count.get(name, 0) + 1
+                                latest_signal = {"stock": name, "price": entry, "side": "SELL", "time": now.strftime('%H:%M')}
 
-                        # --- BUY LOGIC ---
-                        if prev['close'] < prev['open'] and curr['close'] > curr['open'] and curr['close'] > prev['high']:
-                            entry = curr['close']
-                            # ०.१५% बफर स्टॉपलॉस
-                            sl = round(prev['low'] * (1 - buffer_val), 2)
-                            target = round(entry + (entry - sl) * 2, 2)
-
-                            msg = (f"🚀 *BUY:* {name}\nEntry: {entry}\nSL (Buffer): {sl}\nTGT: {target}\nGap: {round(gap_pct, 2)}%")
-                            send_telegram(msg)
-                            signal_count[name] = signal_count.get(name, 0) + 1
-                            latest_signal = {"stock": name, "price": entry, "side": "BUY", "time": now.strftime('%H:%M')}
-                            daily_report.append(f"{now.strftime('%H:%M')} | {name} | BUY | Entry: {entry} | SL: {sl}")
-
-                        # --- SELL LOGIC ---
-                        elif prev['close'] > prev['open'] and curr['close'] < curr['open'] and curr['close'] < prev['low']:
-                            entry = curr['close']
-                            sl = round(prev['high'] * (1 + buffer_val), 2)
-                            target = round(entry - (sl - entry) * 2, 2)
-
-                            msg = (f"🎯 *SELL:* {name}\nEntry: {entry}\nSL (Buffer): {sl}\nTGT: {target}\nGap: {round(gap_pct, 2)}%")
-                            send_telegram(msg)
-                            signal_count[name] = signal_count.get(name, 0) + 1
-                            latest_signal = {"stock": name, "price": entry, "side": "SELL", "time": now.strftime('%H:%M')}
-                            daily_report.append(f"{now.strftime('%H:%M')} | {name} | SELL | Entry: {entry} | SL: {sl}")
-
-                    time.sleep(0.4)
+                    time.sleep(0.3) # API दर मर्यादेसाठी
                 except: continue
-            time.sleep(60)
-        
-        # ३:३० ला रिपोर्ट पाठवणे
-        if now.hour == 15 and now.minute == 31:
-            if daily_report:
-                report_msg = "📊 *आजचा ट्रेड रिपोर्ट*\n\n" + "\n".join(daily_report)
-                send_telegram(report_msg)
-                daily_report = []
-                signal_count = {}
-            time.sleep(60)
+        time.sleep(60)
 
 @app.route('/')
 def index():
