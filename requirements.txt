@@ -1,5 +1,5 @@
 flask
 dhanhq
-pandas
+
 requests
 gunicorn
