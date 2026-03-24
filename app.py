@@ -8,149 +8,127 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# --- तुमची माहिती ---
-CLIENT_ID = "1105760761"
-ACCESS_TOKEN = "EyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MzY1MTg4LCJpYXQiOjE3NzQyNzg3ODgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.MYos_aoKx0Asovh4abb8mf-uiD7mNfY_-bVaq1YWNvJRpYrI_UBhJhZreE4TZ5uFgBZ_EmYLJ7avrDRbBeztAA"
-TELEGRAM_TOKEN = "8581468481:AAGSx4vbYZ2Ygq_slm3PDpZBUzlcpWHsiAk"
+# --- तुमची माहिती भरा ---
+CLIENT_ID = "तुमचा_CLIENT_ID"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0NDM0NDc0LCJpYXQiOjE3NzQzNDgwNzQsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA1NzYwNzYxIn0.OyMxZqT_w_sbgtowNA0bOuF53vqIDL1bvKD-oAN0HN6Vl0zAaTwhKzh2KFF2OJocynHpZKBQj9o3WZmCHTn2ZA"
+TELEGRAM_TOKEN = "8581468481:AAETOZPw9mptClRDOrvldCX_5oVmdgnkc9Y"
 TELEGRAM_CHAT_ID = "799650120"
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 COMMODITIES = {'CRUDEOIL': 25145, 'NATURALGAS': 25147}
 
-# स्टेटस लॉग साठवण्यासाठी लिस्ट
+# डेटा साठवण्यासाठी ग्लोबल लिस्ट
 status_log = [] 
-latest_signals_list = []
+latest_signal = {"side": "SCANNING", "stock": "MCX MONITOR", "price": "Waiting"}
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
-    except: pass
+    except Exception as e:
+        print(f"Telegram Error: {e}")
 
-def get_slot_status():
-    """दर १५ मिनिटांनी डेटा तपासून स्टेटस तयार करते"""
+def get_slot_data():
+    """दर १५ मिनिटांनी डेटा मिळवते"""
     now = datetime.now()
-    # १५ मिनिटांचा टप्पा ठरवणे (उदा. 10:00, 10:15)
-    current_minute = (now.minute // 15) * 15
-    time_label = now.replace(minute=current_minute, second=0).strftime('%H:%M')
+    slot_time = now.strftime('%H:%M')
     
-    entry = {"time": time_label, "crude": "Checking...", "ng": "Checking..."}
+    entry = {"time": slot_time, "crude": "NO DATA", "ng": "NO DATA"}
     
     for name, s_id in COMMODITIES.items():
         try:
+            # धन API कडून इंट्राडे डेटा मागवणे
             resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
             if resp and resp.get('status') == 'success':
-                res_data = resp.get('data')
-                # जर डेटा असेल तर YES, नसेल तर NO DATA
-                status = "YES" if (res_data and len(res_data) >= 2) else "NO DATA"
-            else:
-                status = "NO"
+                data = resp.get('data')
+                if data and len(data) >= 2:
+                    entry[name.lower().replace("oil","")] = "YES"
+                    # सिग्नल चेकिंग (उदाहरणादाखल सेल सिग्नल)
+                    curr = data[-1]
+                    prev = data[-2]
+                    if curr['close'] < prev['low']: # साधे लॉजिक
+                        global latest_signal
+                        latest_signal = {
+                            "side": "SELL",
+                            "stock": name,
+                            "price": curr['close']
+                        }
         except:
-            status = "ERROR"
-        
-        if name == 'CRUDEOIL': entry["crude"] = status
-        else: entry["ng"] = status
-        
+            entry[name.lower().replace("oil","")] = "ERROR"
+            
     return entry
 
 def scanner():
-    global status_log, latest_signals_list
-    last_processed_slot = ""
+    global status_log
+    last_processed_minute = -1
     
     while True:
         now = datetime.now()
-        # दर १५ मिनिटांचा स्लॉट ओळखा
-        current_slot = (now.minute // 15) * 15
-        slot_time = now.replace(minute=current_slot, second=0).strftime('%H:%M')
+        # दर १५ मिनिटांनी (उदा. 00, 15, 30, 45) रन होईल
+        if now.minute % 15 == 0 and now.minute != last_processed_minute:
+            new_entry = get_slot_data()
+            status_log.insert(0, new_entry)
+            status_log = status_log[:10] # फक्त शेवटचे १० रेकॉर्ड ठेवा
+            
+            # टेलिग्राम रिपोर्ट
+            report = f"📊 *MCX 15-Min Report ({new_entry['time']})*\n• Crude: {new_entry['crude']}\n• NG: {new_entry['ng']}"
+            send_telegram(report)
+            
+            last_processed_minute = now.minute
+        
+        time.sleep(30) # दर ३० सेकंदाला चेक करा
 
-        # मार्केट वेळेतच चेक करा (9 AM to 11:30 PM)
-        if (9, 0) <= (now.hour, now.minute) <= (23, 30):
-            if slot_time != last_processed_slot:
-                # नवीन स्लॉट सुरू झाल्यावर स्टेटस चेक करा
-                new_entry = get_slot_status()
-                status_log.insert(0, new_entry) # सर्वात नवीन वर दिसेल
-                
-                # फक्त शेवटचे १५ रेकॉर्ड ठेवा
-                if len(status_log) > 15:
-                    status_log = status_log[:15]
-                
-                # टेलिग्रामवर रिपोर्ट पाठवा
-                report_msg = f"📊 *Slot Report ({slot_time}):*\n• Crude: {new_entry['crude']}\n• NG: {new_entry['ng']}"
-                send_telegram(report_msg)
-                
-                last_processed_slot = slot_time
-
-            # सेल सिग्नलसाठी सतत स्कॅनिंग (प्रत्येक ३० सेकंदाला)
-            for name, s_id in COMMODITIES.items():
-                try:
-                    resp = dhan.historical_minute_charts(s_id, 'MCX', 'INTRA', '15')
-                    if resp and resp.get('status') == 'success':
-                        data = resp.get('data')
-                        if data and len(data) >= 2:
-                            prev, curr = data[-2], data[-1]
-                            if prev['close'] > prev['open'] and curr['close'] < curr['open']:
-                                if curr['close'] < prev['open']:
-                                    sig = f"🎯 *SELL SIGNAL:* {name}\nPrice: {curr['close']}\nTime: {now.strftime('%H:%M:%S')}"
-                                    if sig not in latest_signals_list:
-                                        latest_signals_list.insert(0, sig)
-                                        latest_signals_list = latest_signals_list[:5]
-                                        send_telegram(sig)
-                except: pass
-                
-        time.sleep(30)
-
+# --- प्रीमियम डेस्कटॉप डिझाइन (HTML) ---
 HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MCX 15-Min Monitor</title>
+    <title>Dhan AI Live Scanner</title>
     <meta http-equiv="refresh" content="30">
     <style>
-        body { font-family: sans-serif; background-color: #0d1117; color: white; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #30363d; text-align: center; }
+        body { background: #0b0e11; color: white; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; padding-top: 50px; }
+        .card { background: #1e2329; padding: 40px; border-radius: 20px; text-align: center; border: 1px solid #2b3139; width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .badge { background: #f0b90b; color: black; padding: 5px 15px; border-radius: 50px; font-weight: bold; font-size: 12px; }
+        .price { font-size: 60px; font-weight: bold; margin: 20px 0; color: {% if signal.side == 'SELL' %}#f6465d{% else %}#f0b90b{% endif %}; }
+        .stock { font-size: 20px; color: #848e9c; letter-spacing: 2px; }
+        table { margin-top: 30px; width: 100%; max-width: 500px; border-collapse: collapse; background: #161b22; border-radius: 10px; overflow: hidden; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #30363d; }
         th { background: #21262d; color: #58a6ff; }
-        .yes { color: #3fb950; font-weight: bold; }
-        .no { color: #f85149; font-weight: bold; }
-        .nodata { color: #e3b341; font-weight: bold; }
-        .signal-box { background: #d9534f; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 14px; }
+        .status-yes { color: #3fb950; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 style="text-align: center;">📊 MCX 15-Min Status History</h2>
-        <table>
-            <tr>
-                <th>Time Slot</th>
-                <th>Crude Oil</th>
-                <th>Natural Gas</th>
-            </tr>
-            {% for log in logs %}
-            <tr>
-                <td>{{ log.time }}</td>
-                <td class="{{ 'yes' if log.crude=='YES' else ('nodata' if log.crude=='NO DATA' else 'no') }}">{{ log.crude }}</td>
-                <td class="{{ 'yes' if log.ng=='YES' else ('nodata' if log.ng=='NO DATA' else 'no') }}">{{ log.ng }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="3">डेटा गोळा होत आहे... पुढील १५ मिनिटांच्या स्लॉटची प्रतीक्षा करा.</td></tr>
-            {% endfor %}
-        </table>
-        
-        <h3 style="margin-top: 30px;">🎯 Latest Signals</h3>
-        {% for s in signals %}
-            <div class="signal-box">{{ s | replace('\\n', '<br>') | safe }}</div>
-        {% else %}
-            <p style="color: #8b949e;">सध्या कोणताही सेल सिग्नल नाही.</p>
-        {% endfor %}
+    <div class="card">
+        <div class="badge">{{ signal.side }} SIGNAL</div>
+        <div class="stock">{{ signal.stock }}</div>
+        <div class="price">₹{{ signal.price }}</div>
+        <div style="color: #848e9c; font-size: 12px;">Last Update: {{ time }}</div>
     </div>
+
+    <table>
+        <tr>
+            <th>Time Slot</th>
+            <th>Crude</th>
+            <th>Nat Gas</th>
+        </tr>
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.time }}</td>
+            <td class="{% if log.crude == 'YES' %}status-yes{% endif %}">{{ log.crude }}</td>
+            <td class="{% if log.ng == 'YES' %}status-yes{% endif %}">{{ log.ng }}</td>
+        </tr>
+        {% endfor %}
+    </table>
 </body>
 </html>
 """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE, logs=status_log, signals=latest_signals_list)
+    return render_template_string(HTML_PAGE, 
+                                 signal=latest_signal, 
+                                 logs=status_log, 
+                                 time=datetime.now().strftime('%H:%M:%S'))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
