@@ -3,122 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dhan AI Scanner</title>
+    <title>NSE Algo Monitor</title>
+    <meta http-equiv="refresh" content="30">
     <style>
-        /* बेस डिझाइन */
-        body { 
-            background: #0b0e11; 
-            color: white; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --text-blue: #58a6ff;
+            --buy-green: #39d353;
+            --sell-red: #ff7b72;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             margin: 0;
-            transition: background 0.5s ease;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
-        /* सिग्नलनुसार बॅकग्राउंड कलर्स */
-        body.buy { background: #0c3d2e; } /* गडद हिरवा */
-        body.sell { background: #3d0c11; } /* गडद लाल */
-
-        .container {
+        .dashboard-header {
+            width: 100%;
+            max-width: 800px;
+            background: linear-gradient(135deg, #1f6feb 0%, #238636 100%);
+            padding: 20px;
+            border-radius: 12px;
             text-align: center;
-            padding: 50px;
-            border-radius: 30px;
-            background: rgba(30, 35, 41, 0.9);
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 2px solid #2b2f36;
-            min-width: 320px;
+            margin-bottom: 25px;
         }
 
-        .stock-name {
-            font-size: 24px;
-            font-weight: bold;
-            color: #848e9c;
+        h1 { margin: 0; font-size: 22px; color: white; letter-spacing: 1px; }
+
+        .status-indicator {
+            font-size: 13px;
+            margin-top: 8px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .table-container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+        }
+
+        th {
+            background-color: #21262d;
+            color: var(--text-blue);
+            padding: 15px;
+            font-size: 14px;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            border-bottom: 2px solid var(--border-color);
         }
 
-        .price {
-            font-size: 72px;
-            font-weight: 800;
-            margin: 20px 0;
+        td {
+            padding: 14px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 15px;
         }
 
-        /* किमतीचे रंग */
-        .buy .price { color: #2ebd85; }
-        .sell .price { color: #f6465d; }
-        .scanning .price { color: #f0b90b; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: #1c2128; }
 
-        .badge {
-            display: inline-block;
-            padding: 8px 20px;
-            border-radius: 50px;
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 20px;
+        .signal-buy { color: var(--buy-green); font-weight: bold; }
+        .signal-sell { color: var(--sell-red); font-weight: bold; }
+
+        .no-data {
+            padding: 50px;
+            color: #8b949e;
+            font-style: italic;
         }
 
-        .buy .badge { background: #2ebd85; color: black; }
-        .sell .badge { background: #f6465d; color: white; }
-        .scanning .badge { background: #2b2f36; color: #848e9c; }
-
-        .footer-info {
-            font-size: 14px;
-            color: #848e9c;
+        .footer {
             margin-top: 30px;
-            border-top: 1px solid #2b2f36;
-            padding-top: 15px;
+            font-size: 12px;
+            color: #8b949e;
+            text-align: center;
         }
 
-        .live-dot {
-            height: 10px;
-            width: 10px;
-            background-color: #f0b90b;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 5px;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
+        /* मोबाईलसाठी खास डिझाइन */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            td, th { padding: 10px; font-size: 13px; }
+            h1 { font-size: 18px; }
         }
     </style>
 </head>
-<body class="{{ side|lower if side else 'scanning' }}">
+<body>
 
-    <div class="container">
-        <div class="badge">
-            {% if side == 'BUY' %} 🚀 BUY SIGNAL 
-            {% elif side == 'SELL' %} 🎯 SELL SIGNAL 
-            {% else %} 🔍 SCANNING MODE {% endif %}
-        </div>
-
-        <div class="stock-name">{{ stock }}</div>
-        
-        <div class="price">
-            {% if price == 'Waiting' %}
-                <span style="font-size: 40px;">प्रतीक्षा करा...</span>
-            {% else %}
-                ₹{{ price }}
-            {% endif %}
-        </div>
-
-        <div class="footer-info">
-            <span class="live-dot"></span>
-            वेळ: {{ time }} | १८०+ स्टॉक्स लाईव्ह
-        </div>
+    <div class="dashboard-header">
+        <h1>📊 NSE ALGO MONITOR</h1>
+        <div class="status-indicator">लाईव्ह स्कॅनिंग सुरू आहे... (सकाळी ९:३० - दुपारी १:००)</div>
     </div>
 
-    <script>
-        // दर ३० सेकंदाला पेज ऑटो रिफ्रेश होईल
-        setTimeout(function(){
-            location.reload();
-        }, 30000);
-    </script>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>वेळ (Time)</th>
+                    <th>स्टॉक (Stock)</th>
+                    <th>सिग्नल (Signal)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if logs %}
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.time }}</td>
+                        <td>{{ log.stock }}</td>
+                        <td class="{{ 'signal-buy' if 'BUY' in log.status else 'signal-sell' }}">
+                            {{ log.status }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="3" class="no-data">
+                            ☕ नवीन सिग्नल्सची प्रतीक्षा आहे... <br>
+                            <small>(सिग्नल्स आल्यावर येथे आपोआप दिसतील)</small>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        सिग्नल्स दररोज सकाळी ९:०० वाजता आपोआप रिसेट होतात. <br>
+        © 2026 Datta Trading Terminal
+    </div>
+
 </body>
 </html>
